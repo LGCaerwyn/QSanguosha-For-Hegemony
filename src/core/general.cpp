@@ -31,8 +31,11 @@
 
 General::General(Package *package, const QString &name, const QString &kingdom,
     int double_max_hp, bool male, bool hidden, bool never_shown)
-    : QObject(package), kingdom(kingdom), double_max_hp(double_max_hp), gender(male ? Male : Female),
-    hidden(hidden), never_shown(never_shown), head_max_hp_adjusted_value(0), deputy_max_hp_adjusted_value(0)
+    : QObject(package), kingdom(kingdom),
+      double_max_hp(double_max_hp), gender(male ? Male : Female),
+      hidden(hidden), never_shown(never_shown),
+      head_max_hp_adjusted_value(0), deputy_max_hp_adjusted_value(0),
+      skin_count(-1)
 {
     static QChar lord_symbol('$');
     if (name.endsWith(lord_symbol)) {
@@ -171,11 +174,12 @@ QString General::getCompanions() const{
     QStringList name;
     foreach(QString general, companions)
         name << QString("%1").arg(Sanguosha->translate(general));
-    foreach(QString gnr, Sanguosha->getGeneralNames()) {
-        if (!Sanguosha->getGeneral(gnr))
+    GeneralList generals(Sanguosha->getGeneralList());
+    foreach(const General *gnr, generals) {
+        if (!gnr)
             continue;
-        if (Sanguosha->getGeneral(gnr)->companions.contains(objectName()))
-            name << QString("%1").arg(Sanguosha->translate(gnr));
+        if (gnr->companions.contains(objectName()))
+            name << QString("%1").arg(Sanguosha->translate(gnr->objectName()));
     }
     return name.join(" ");
 }
@@ -273,6 +277,23 @@ void General::lastWord(const int skinId) const
     Sanguosha->playAudioEffect(fileName);
 }
 
+void General::tryLoadingSkinTranslation(const int skinId) const
+{
+    if (translated_skins.contains(skinId))
+        return;
+
+    const QString file = QString("hero-skin/%1/%2/%3.lua")
+            .arg(objectName()).arg(skinId)
+            .arg(Config.value("Language", "zh_CN").toString());
+
+    if (QFile::exists(file)) {
+        Sanguosha->setProperty("CurrentSkinId", skinId);
+        DoLuaScript(Sanguosha->getLuaState(), file.toLatin1().constData());
+    }
+
+    translated_skins << skinId;
+}
+
 void General::addCompanion(const QString &name) {
     this->companions << name;
 }
@@ -296,13 +317,37 @@ void General::setDeputyMaxHpAdjustedValue(int adjusted_value /* = -1 */) {
 
 int General::skinCount() const
 {
-    static int i = -1;
-    if (i != -1)
-        return i;
+    if (skin_count != -1)
+        return skin_count;
 
     forever {
-        const QPixmap card = G_ROOM_SKIN.getGeneralCardPixmap(objectName(), (++ i) + 1);
-        if (card.height() <= 1 || card.width() <= 1)
-            return i;
+        if (!G_ROOM_SKIN.doesGeneralHaveSkin(objectName(), (++skin_count) + 1))
+            return skin_count;
     }
+}
+
+QString General::getTitle(const int skinId) const
+{
+    QString title;
+    const QString id = QString::number(skinId);
+    if (skinId == 0)
+        title = Sanguosha->translate("#" + objectName());
+    else
+        title = Sanguosha->translate("#" + id + objectName());
+
+    if (title.startsWith("#")) {
+        if (objectName().contains("_")) {
+            const QString generalName = objectName().split("_").last();
+            if (skinId == 0) {
+                title = Sanguosha->translate(("#") + generalName);
+            } else {
+                title = Sanguosha->translate(("#") + id + generalName);
+                if (title.startsWith("#"))
+                    title = Sanguosha->translate(("#") + generalName);
+            }
+        } else if (skinId != 0) {
+            title = Sanguosha->translate("#" + objectName());
+        }
+    }
+    return title;
 }

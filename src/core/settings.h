@@ -118,6 +118,7 @@ public:
     QString RecordSavePaths;
 
     int BubbleChatBoxKeepSeconds;
+    bool IgnoreOthersSwitchesOfSkin;
 
     // consts
     static const int S_SURRENDER_REQUEST_MIN_INTERVAL;
@@ -128,7 +129,8 @@ public:
     static const int S_JUDGE_LONG_DELAY;
 };
 
-extern Settings Config;
+extern Settings *SettingsInstance;
+#define Config (*SettingsInstance)
 
 #endif
 

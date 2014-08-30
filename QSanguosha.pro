@@ -109,6 +109,9 @@ SOURCES += \
     src/ui/BubbleChatBox.cpp \
     src/ui/StyleHelper.cpp \
     src/ui/PlayerCardBox.cpp \
+    src/ui/GraphicsPixmapHoverItem.cpp \
+    src/ui/HeroSkinContainer.cpp \
+    src/ui/SkinItem.cpp \
     src/util/detector.cpp \
     src/util/nativesocket.cpp \
     src/util/recorder.cpp \
@@ -213,6 +216,9 @@ HEADERS += \
     src/ui/BubbleChatBox.h \
     src/ui/StyleHelper.h \
     src/ui/PlayerCardBox.h \
+    src/ui/GraphicsPixmapHoverItem.h \
+    src/ui/HeroSkinContainer.h \
+    src/ui/SkinItem.h \
     src/util/detector.h \
     src/util/nativesocket.h \
     src/util/recorder.h \
@@ -313,10 +319,20 @@ macx{
     DEFINES += MAC
     LIBS += -L"$$_PRO_FILE_PWD_/lib/mac/lib"
 }
+ios{
+    DEFINES += IOS
+    CONFIG(iphonesimulator){
+        LIBS += -L"$$_PRO_FILE_PWD_/lib/ios/simulator/lib"
+    }
+    else {
+        LIBS += -L"$$_PRO_FILE_PWD_/lib/ios/device/lib"
+    }
+}
 linux{
     android{
         DEFINES += ANDROID
-        LIBS += -L"$$_PRO_FILE_PWD_/lib/android/arm/lib"
+        ANDROID_LIBPATH = $$_PRO_FILE_PWD_/lib/android/$$ANDROID_ARCHITECTURE/lib
+        LIBS += -L"$$ANDROID_LIBPATH"
     }
     else {
         DEFINES += LINUX
@@ -336,9 +352,9 @@ CONFIG(audio){
     else:LIBS += -lfmodex
     SOURCES += src/core/audio.cpp
 
-    android-g++{
-        CONFIG(debug, debug|release):ANDROID_EXTRA_LIBS += $$_PRO_FILE_PWD_/lib/android/arm/lib/libfmodexL.so
-        else:ANDROID_EXTRA_LIBS += $$_PRO_FILE_PWD_/lib/android/arm/lib/libfmodex.so
+    android{
+        CONFIG(debug, debug|release):ANDROID_EXTRA_LIBS += $$ANDROID_LIBPATH/libfmodexL.so
+        else:ANDROID_EXTRA_LIBS += $$ANDROID_LIBPATH/libfmodex.so
     }
 }
 

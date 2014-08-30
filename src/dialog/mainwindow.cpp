@@ -713,6 +713,10 @@ void MainWindow::on_actionReplay_triggered() {
 void MainWindow::networkError(const QString &error_msg) {
     if (isVisible())
         QMessageBox::warning(this, tr("Network error"), error_msg);
+
+    if (NULL != RoomSceneInstance) {
+        RoomSceneInstance->stopHeroSkinChangingAnimations();
+    }
 }
 
 void BackLoader::preload() {
@@ -830,7 +834,7 @@ void MainWindow::startGameInAnotherInstance() {
 
 void MainWindow::on_actionGeneral_Overview_triggered() {
     GeneralOverview *overview = GeneralOverview::getInstance(this);
-    overview->fillGenerals(Sanguosha->getGenerals());
+    overview->fillGenerals(Sanguosha->getGeneralList());
     overview->show();
 }
 
