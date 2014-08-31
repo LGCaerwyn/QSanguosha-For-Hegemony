@@ -34,6 +34,7 @@
 #include "recorder.h"
 #include "audio.h"
 #include "StyleHelper.h"
+#include "uiUtils.h"
 
 #include <lua.hpp>
 #include <QGraphicsView>
@@ -79,6 +80,7 @@ public:
 #endif
     }
 
+#ifndef Q_OS_ANDROID
     virtual void mousePressEvent(QMouseEvent *event) {
         MainWindow *parent = qobject_cast<MainWindow *>(parentWidget());
         if (parent)
@@ -107,6 +109,7 @@ public:
             parent->mouseDoubleClickEvent(event);
         QGraphicsView::mouseDoubleClickEvent(event);
     }
+#endif
 #endif
 
     virtual void resizeEvent(QResizeEvent *event) {
@@ -240,6 +243,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     addAction(ui->actionFullscreen);
 
+    menu = new QPushButton(this);
+    menu->setMenu(ui->menuSumMenu);
+    menu->setProperty("control", true);
+    StyleHelper::getInstance()->setIcon(menu, QChar(0xf0c9), 15);
+    menu->setToolTip(tr("<font color=%1>Config</font>").arg(Config.SkillDescriptionInToolTipColor.name()));
+
+#ifndef Q_OS_ANDROID
     minButton = new QPushButton(this);
     minButton->setProperty("control", true);
 
@@ -255,15 +265,10 @@ MainWindow::MainWindow(QWidget *parent)
     closeButton->setObjectName("closeButton");
     closeButton->setProperty("control", true);
 
-    menu = new QPushButton(this);
-    menu->setMenu(ui->menuSumMenu);
-    menu->setProperty("control", true);
-
     StyleHelper::getInstance()->setIcon(minButton, QChar(0xf068), 15);
     StyleHelper::getInstance()->setIcon(maxButton, QChar(0xf106), 15);
     StyleHelper::getInstance()->setIcon(normalButton, QChar(0xf107), 15);
     StyleHelper::getInstance()->setIcon(closeButton, QChar(0xf00d), 15);
-    StyleHelper::getInstance()->setIcon(menu, QChar(0xf0c9), 15);
 
     minButton->setToolTip(tr("<font color=%1>Minimize</font>").arg(Config.SkillDescriptionInToolTipColor.name()));
     connect(minButton, SIGNAL(clicked()), this, SLOT(showMinimized()));
@@ -273,10 +278,11 @@ MainWindow::MainWindow(QWidget *parent)
     connect(normalButton, SIGNAL(clicked()), this, SLOT(showNormal()));
     closeButton->setToolTip(tr("<font color=%1>Close</font>").arg(Config.SkillDescriptionInToolTipColor.name()));
     connect(closeButton, SIGNAL(clicked()), this, SLOT(close()));
-    menu->setToolTip(tr("<font color=%1>Config</font>").arg(Config.SkillDescriptionInToolTipColor.name()));
 
     menuBar()->hide();
-    
+#else
+    ui->menuSumMenu->removeAction(ui->menuView->menuAction());
+#endif
     repaintButtons();
 
     QPropertyAnimation *animation = new QPropertyAnimation(this, "windowOpacity");
@@ -291,6 +297,7 @@ MainWindow::MainWindow(QWidget *parent)
     systray = NULL;
 }
 
+#ifndef Q_OS_ANDROID
 void MainWindow::mousePressEvent(QMouseEvent *event)
 {
     if (windowState() & (Qt::WindowMaximized | Qt::WindowFullScreen))
@@ -429,6 +436,7 @@ void MainWindow::mouseDoubleClickEvent(QMouseEvent *event)
             showMaximized();
     }
 }
+#endif
 
 void MainWindow::changeEvent(QEvent *event)
 {
@@ -546,6 +554,7 @@ void MainWindow::roundCorners()
 
 void MainWindow::repaintButtons()
 {
+#ifndef Q_OS_ANDROID
     if (!minButton || !maxButton || !normalButton || !closeButton || !menu)
         return;
     int width = this->width();
@@ -571,23 +580,23 @@ void MainWindow::repaintButtons()
         minButton->setVisible(true);
         menu->setGeometry(width - 170, 0, 40, 33);
     }
+#else
+    if (menu)
+        menu->setGeometry(width() - 50, 0, 40, 33);
+#endif
 }
 
 void MainWindow::closeEvent(QCloseEvent *) {
     Config.setValue("WindowSize", size());
     Config.setValue("WindowPosition", pos());
     Config.setValue("WindowState", (int)windowState());
-
-    //It's weird that Config isn't automatically synchronized on Android...
-#ifdef Q_OS_ANDROID
-    Config.sync();
-#endif
 }
 
 MainWindow::~MainWindow() {
     delete ui;
     view->deleteLater();
     QSanSkinFactory::destroyInstance();
+    QSanUiUtils::QSanFreeTypeFont::quit();
 }
 
 void MainWindow::gotoScene(QGraphicsScene *scene) {
@@ -973,6 +982,7 @@ void MainWindow::on_actionMinimize_to_system_tray_triggered()
         QMenu *menu = new QMenu;
         menu->addAction(appear);
         menu->addMenu(ui->menuGame);
+
         menu->addMenu(ui->menuView);
         menu->addMenu(ui->menuOptions);
         menu->addMenu(ui->menuHelp);
