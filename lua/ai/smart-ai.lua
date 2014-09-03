@@ -129,6 +129,11 @@ sgs.current_mode_players = {
 	qun = 0
 }
 sgs.general_shown = {}
+sgs.Slash_Natures = {
+	Slash = sgs.DamageStruct_Normal,
+	FireSlash = sgs.DamageStruct_Fire,
+	ThunderSlash = sgs.DamageStruct_Thunder,
+}
 
 for i = sgs.NonTrigger, sgs.NumOfEvents, 1 do
 	sgs.ai_debug_func[i] = {}
@@ -257,11 +262,12 @@ function sgs.cloneCard(name, suit, number)
 	suit = suit or sgs.Card_SuitToBeDecided
 	number = number or -1
 	local card = sgs.Sanguosha:cloneCard(name, suit, number)
+	if not card then global_room:writeToConsole(debug.traceback()) return end
 	card:deleteLater()
 	return card
 end
 
-function SmartAI:getTurnUse()
+function SmartAI:getTurnUse(priority)
 	local cards = self.player:getHandcards()
 	cards = sgs.QList2Table(cards)
 
@@ -273,7 +279,7 @@ function SmartAI:getTurnUse()
 	self.slash_distance_limit = (1 + sgs.Sanguosha:correctCardTarget(sgs.TargetModSkill_DistanceLimit, self.player, slash) > 50)
 
 	self.weaponUsed = false
-	self:fillSkillCards(cards)
+	self:fillSkillCards(cards, priority)
 	self:sortByUseValue(cards)
 
 	if self.player:hasWeapon("Crossbow") or #self.player:property("extra_slash_specific_assignee"):toString():split("+") > 1 then
@@ -282,6 +288,8 @@ function SmartAI:getTurnUse()
 	end
 
 	for _, card in ipairs(cards) do
+		if priority and self:getDynamicUsePriority(card) < 6 then continue end
+
 		local dummy_use = { isDummy = true }
 
 		local type = card:getTypeId()
@@ -317,6 +325,23 @@ end
 function SmartAI:activate(use)
 	self:updatePlayers()
 	self:assignKeep(true)
+	if self.player:getHandcardNum() > 30 then
+		self.toUse = self:getTurnUse(true)
+		self:sortByDynamicUsePriority(self.toUse)
+		for _, card in ipairs(self.toUse) do
+			if not self.player:isCardLimited(card, card:getHandlingMethod())
+				or (card:canRecast() and not self.player:isCardLimited(card, sgs.Card_MethodRecast)) then
+				local type = card:getTypeId()
+
+				self["use" .. sgs.ai_type_name[type + 1] .. "Card"](self, card, use)
+
+				if use:isValid(nil) then
+					self.toUse = nil
+					return
+				end
+			end
+		end
+	end
 	self.toUse = self:getTurnUse()
 	self:sortByDynamicUsePriority(self.toUse)
 	for _, card in ipairs(self.toUse) do
@@ -343,16 +368,17 @@ function SmartAI:objectiveLevel(player)
 	if self.room:alivePlayerCount() == 2 then return 5 end
 
 	local self_kingdom = self.player:getKingdom()
-	local player_kingdom = sgs.ai_explicit[player:objectName()]
-	if player_kingdom == "unknown" then
+	local player_kingdom_evaluate = self:evaluateKingdom(player)
+	local player_kingdom_explicit = sgs.ai_explicit[player:objectName()]
+	if player_kingdom_explicit == "unknown" then
 		local mark = string.format("KnownBoth_%s_%s", self.player:objectName(), player:objectName())
 		if player:getMark(mark) > 0 then
-			player_kingdom = player:getRole() == "careerist" and "careerist" or player:getKingdom()
+			player_kingdom_explicit = player:getRole() == "careerist" and "careerist" or player:getKingdom()
 		end
 	end
 
 	local upperlimit = player:getLord() and 99 or self.room:getPlayers():length() / 2
-	if (not sgs.isAnjiang(self.player) or sgs.shown_kingdom[self_kingdom] < upperlimit) and self.role ~= "careerist" and self_kingdom == player_kingdom then return -2 end
+	if (not sgs.isAnjiang(self.player) or sgs.shown_kingdom[self_kingdom] < upperlimit) and self.role ~= "careerist" and self_kingdom == player_kingdom_explicit then return -2 end
 	if self:getKingdomCount() <= 2 then return 5 end
 
 	local selfIsCareerist = self.role == "careerist" or sgs.shown_kingdom[self_kingdom] >= upperlimit and sgs.isAnjiang(self.player)
@@ -361,10 +387,10 @@ function SmartAI:objectiveLevel(player)
 	if gameProcess == "===" then
 		if player:getMark("KnownBothEnemy" .. self.player:objectName()) > 0 then return 5 end
 		if not selfIsCareerist and sgs.shown_kingdom[self_kingdom] < upperlimit then
-			if sgs.isAnjiang(player) and player_kingdom == "unknown" then
-				if self:evaluateKingdom(player) == self_kingdom then return -1
-				elseif string.find(self:evaluateKingdom(player), self_kingdom) then return 0
-				elseif self:evaluateKingdom(player) == "unknown" and player:getHp() == 1 then return 0
+			if sgs.isAnjiang(player) and player_kingdom_explicit == "unknown" then
+				if player_kingdom_evaluate == self_kingdom then return -1
+				elseif string.find(player_kingdom_evaluate, self_kingdom) then return 0
+				elseif player_kingdom_evaluate == "unknown" and player:getHp() == 1 then return 0
 				else
 					return self:getOverflow() > 0 and 3.5 or 0
 				end
@@ -381,44 +407,49 @@ function SmartAI:objectiveLevel(player)
 		if string.find(gameProcess, ">>>") then
 			if self_kingdom == kingdom and not selfIsCareerist then
 				if sgs.shown_kingdom[self_kingdom] < upperlimit and sgs.isAnjiang(player)
-					and (self:evaluateKingdom(player) == self_kingdom or string.find(self:evaluateKingdom(player), self_kingdom)) then return 0
-				elseif self:evaluateKingdom(player) == "unknown" and sgs.turncount <= 2 then return 0
+					and (player_kingdom_evaluate == self_kingdom or string.find(player_kingdom_evaluate, self_kingdom)) then return 0
+				elseif player_kingdom_evaluate == "unknown" and sgs.turncount <= 2 then return 0
 				else return 5
 				end
 			else
-				if player_kingdom == kingdom or self:evaluateKingdom(player) == kingdom or isWeakPlayer then return 5
-				elseif not string.find(self:evaluateKingdom(player), kingdom) or player:getRole() == "careerist" then return -1
+				if player_kingdom_explicit == kingdom or player_kingdom_evaluate == kingdom or isWeakPlayer then return 5
+				elseif not string.find(player_kingdom_evaluate, kingdom) then return -1
+				elseif player_kingdom_explicit == "careerist" then return -1
+				elseif player_kingdom_evaluate == "unknown" then return 0
 				else return 3
 				end
 			end
 		elseif string.find(gameProcess, ">>") then
 			if self_kingdom == kingdom and not selfIsCareerist then
 				if sgs.shown_kingdom[self_kingdom] < upperlimit and sgs.isAnjiang(player) then
-					if self:evaluateKingdom(player) == self_kingdom then return -1
-					elseif string.find(self:evaluateKingdom(player), self_kingdom) then return 0
-					elseif self:evaluateKingdom(player) == "unknown" and sgs.turncount <= 2 then return 0
+					if player_kingdom_evaluate == self_kingdom then return -1
+					elseif string.find(player_kingdom_evaluate, self_kingdom) then return 0
+					elseif player_kingdom_evaluate == "unknown" and sgs.turncount <= 2 then return 0
 					end
 				end
 				return 5
 			else
-				if player_kingdom == kingdom or self:evaluateKingdom(player) == kingdom or isWeakPlayer then return 5
-				elseif not string.find(self:evaluateKingdom(player), kingdom) then return 0
+				if player_kingdom_explicit == kingdom or player_kingdom_evaluate == kingdom or isWeakPlayer then return 5
+				elseif not string.find(player_kingdom_evaluate, kingdom) then return 0
+				elseif player_kingdom_explicit == "careerist" then return 0
+				elseif player_kingdom_evaluate == "unknown" then return 0
 				else return 3
 				end
 			end
 		else
 			if self_kingdom == kingdom and not selfIsCareerist then
 				if sgs.shown_kingdom[self_kingdom] < upperlimit and sgs.isAnjiang(player) then
-					if self:evaluateKingdom(player) == self_kingdom then return -1
-					elseif string.find(self:evaluateKingdom(player), self_kingdom) then return 0
-					elseif self:evaluateKingdom(player) == "unknown" and sgs.turncount <= 2 then return 0
+					if player_kingdom_evaluate == self_kingdom then return -1
+					elseif string.find(player_kingdom_evaluate, self_kingdom) then return 0
+					elseif player_kingdom_evaluate == "unknown" and sgs.turncount <= 2 then return 0
 					end
 				end
 				return 5
 			else
-				if player_kingdom == kingdom or isWeakPlayer then return 5
-				elseif self:evaluateKingdom(player) == kingdom then return 3
-				elseif not string.find(self:evaluateKingdom(player), kingdom) then return 0
+				if player_kingdom_explicit == kingdom or isWeakPlayer then return 5
+				elseif player_kingdom_evaluate == kingdom then return 3
+				elseif player_kingdom_explicit == "careerist" then return 0
+				elseif not string.find(player_kingdom_evaluate, kingdom) then return 0
 				else return 1
 				end
 			end
@@ -518,13 +549,14 @@ function sgs.updateIntention(from, to, intention)
 	if not intention or type(intention) ~= "number" then global_room:writeToConsole(debug.traceback()) end
 	if intention > 0 then intention = 10 end
 	if intention < 0 then intention = -10 end
-	local sendLog
+	local sendLog, output_to
 	if sgs.recorder:evaluateKingdom(from) == "careerist" or sgs.recorder:evaluateKingdom(to, from) == "careerist" then
+	elseif from:objectName() == to:objectName() then
 	else
 		local to_kingdom = sgs.recorder:evaluateKingdom(to, from)
+		local kingdoms = sgs.KingdomsTable
 		if sgs.isAnjiang(from) and to_kingdom ~= "unknown" then
 			to_kingdom = to_kingdom:split("?")
-			local kingdoms = sgs.KingdomsTable
 			if intention > 0 then
 				sendLog = true
 				sgs.outputKingdomValues(from, intention)
@@ -546,7 +578,8 @@ function sgs.updateIntention(from, to, intention)
 				to:setMark("KnownBothEnemy" .. from:objectName(), 1)
 			else
 				sendLog = true
-				sgs.outputKingdomValues(from, intention)
+				output_to = true
+				sgs.outputKingdomValues(to, intention)
 				for _, kingdom in ipairs(kingdoms) do
 					if kingdom ~= from:getKingdom() then
 						sgs.ai_loyalty[kingdom][to:objectName()] = sgs.ai_loyalty[kingdom][to:objectName()] + intention
@@ -562,7 +595,7 @@ function sgs.updateIntention(from, to, intention)
 		sgs.ais[p:objectName()]:updatePlayers()
 	end
 
-	sgs.outputKingdomValues(from, sendLog and intention or 0, sendLog)
+	sgs.outputKingdomValues(output_to and to or from, sendLog and intention or 0, sendLog)
 end
 
 function sgs.outputKingdomValues(player, level, sendLog)
@@ -655,7 +688,7 @@ end
 function sgs.getDefense(player)
 	if not player then return 0 end
 	local attacker = global_room:getCurrent()
-	if not attacker then return 0 end
+	if not attacker then return sgs.getValue(player) end
 	local hp = player:getHp()
 	if player:hasShownSkill("benghuai") and player:getHp() > 4 then hp = 4 end
 	local defense = math.min(hp * 2 + player:getHandcardNum(), hp * 3)
@@ -1088,8 +1121,8 @@ function SmartAI:getDynamicUsePriority(card)
 
 	local value = self:getUsePriority(card) or 0
 	if card:getTypeId() == sgs.Card_TypeEquip then
-		if self.player:hasSkills(sgs.lose_equip_skill) then value = value + 12 end
 		if self.player:hasSkills("xiaoji+qixi") and self:getSameEquip(card) then return 3 end
+		if self.player:hasSkills(sgs.lose_equip_skill) then value = value + 12 end
 		if card:isKindOf("Weapon") and self.player:getPhase() == sgs.Player_Play and #self.enemies > 0 then
 			self:sort(self.enemies)
 			local enemy = self.enemies[1]
@@ -1546,10 +1579,11 @@ function getTrickIntention(trick_class, target)
 	return 0
 end
 
+
 sgs.ai_choicemade_filter.Nullification.general = function(self, player, promptlist)
 	local trick_class = promptlist[2]
 	local target_objectName = promptlist[3]
-	if trick_class == "Nullification" then
+	if string.find(trick_class, "Nullification") then
 		if not sgs.nullification_source or not sgs.nullification_intention or type(sgs.nullification_intention) ~= "number" then
 			self.room:writeToConsole(debug.traceback())
 			return
@@ -1806,9 +1840,6 @@ function SmartAI:filterEvent(event, player, data)
 		local who
 		if not struct.to:isEmpty() then who = struct.to:first() end
 
-
-		if sgs.chongzhen_target then sgs.chongzhen_target = nil end
-
 		if card:isKindOf("Snatch") or card:isKindOf("Dismantlement") then
 			for _, p in sgs.qlist(struct.to) do
 				for _, c in sgs.qlist(p:getCards("hej")) do
@@ -2036,15 +2067,11 @@ function SmartAI:askForDiscard(reason, discard_num, min_num, optional, include_e
 	return to_discard
 end
 
-sgs.ai_skill_discard.gamerule = function(self, discard_num, min_num)
+sgs.ai_skill_discard.gamerule = function(self, discard_num)
 
 	local cards = sgs.QList2Table(self.player:getHandcards())
 	self:sortByKeepValue(cards)
 	local to_discard = {}
-
-	local least = min_num
-	if discard_num - min_num > 1 then least = discard_num - 1 end
-
 	for _, card in ipairs(cards) do
 		if not self.player:isCardLimited(card, sgs.Card_MethodDiscard, true) then
 			table.insert(to_discard, card:getId())
@@ -2101,7 +2128,7 @@ function SmartAI:askForNullification(trick, from, to, positive)
 		if isEnemyFrom and self.player:hasSkill("kongcheng") and self.player:getHandcardNum() == 1 and self.player:isLastHandCard(null_card) and trick:isKindOf("SingleTargetTrick") then
 			return null_card
 		elseif trick:isKindOf("ExNihilo") then
-			if isEnemyFrom and (self:isWeak(from) or from:hasShownSkills(sgs.cardneed_skill)) then
+			if isEnemyFrom and self:evaluateKingdom(from) ~= "unknown" and (self:isWeak(from) or from:hasShownSkills(sgs.cardneed_skill)) then
 				return null_card
 			end
 		elseif trick:isKindOf("Snatch") then
@@ -2170,6 +2197,12 @@ function SmartAI:askForNullification(trick, from, to, positive)
 
 		elseif trick:isKindOf("ArcheryAttack") then
 			if self:isFriend(to) then
+				for _, friend in ipairs(self.friends) do
+					if self:playerGetRound(to) < self:playerGetRound(friend) and (self:aoeIsEffective(trick, to, from) or self:getDamagedEffects(to, from)) then
+					else
+						return null_card
+					end
+				end
 				if not self:aoeIsEffective(trick, to, from) then return
 				elseif self:getDamagedEffects(to, from) then return
 				elseif to:objectName() == self.player:objectName() and self:canAvoidAOE(trick) then return
@@ -2184,6 +2217,13 @@ function SmartAI:askForNullification(trick, from, to, positive)
 				local menghuo
 				for _, p in sgs.qlist(self.room:getAlivePlayers()) do
 					if p:hasShownSkill("huoshou") then menghuo = p break end
+				end
+				for _, friend in ipairs(self.friends) do
+					if self:playerGetRound(to) < self:playerGetRound(friend)
+						and (self:aoeIsEffective(trick, to, menghuo or from) or self:getDamagedEffects(to, menghuo or from)) then
+					else
+						return null_card
+					end
 				end
 				if not self:aoeIsEffective(trick, to, menghuo or from) then return
 				elseif self:getDamagedEffects(to, menghuo or from) then return
@@ -2235,7 +2275,7 @@ function SmartAI:askForNullification(trick, from, to, positive)
 				end
 			end
 		elseif trick:isKindOf("GodSalvation") then
-			if self:isEnemy(to) and self:isWeak(to) then return null_card end
+			if self:isEnemy(to) and self:evaluateKingdom(to) ~= "unknown" and self:isWeak(to) then return null_card end
 		end
 
 	else
@@ -3866,10 +3906,12 @@ function SmartAI:hasSkills(skill_names, player)
 	return false
 end
 
-function SmartAI:fillSkillCards(cards)
+function SmartAI:fillSkillCards(cards, priority)
 	local i = 1
 	while i <= #cards do
 		if prohibitUseDirectly(cards[i], self.player) then
+			table.remove(cards, i)
+		elseif priority and self:getDynamicUsePriority(cards[i]) < 6 then
 			table.remove(cards, i)
 		else
 			i = i + 1
@@ -4444,10 +4486,9 @@ function SmartAI:needToLoseHp(to, from, isSlash, passive, recover)
 	end
 
 	local friends = self:getFriendsNoself(to)
-	local need_jieyin
 	local xiangxiang = self.room:findPlayerBySkillName("jieyin")
 	if xiangxiang and xiangxiang:isWounded() and self:isFriend(xiangxiang, to) and not to:isWounded() and to:isMale() then
-		need_jieyin = true
+		local need_jieyin = true
 		self:sort(friends, "hp")
 		for _, friend in ipairs(friends) do
 			if friend:isMale() and friend:isWounded() then need_jieyin = false end

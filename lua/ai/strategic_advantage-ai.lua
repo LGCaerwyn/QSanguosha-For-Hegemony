@@ -34,7 +34,7 @@ function SmartAI:useCardDrowning(card, use)
 	end
 
 	for _, friend in ipairs(self.friends_noself) do
-		if card:targetFilter(players, friend, self.player) and not players:contains(friend) and self:needToThrowArmor(friend) then
+		if card:targetFilter(players, friend, self.player) and not players:contains(friend) and self:needToThrowArmor(friend) and friend:getEquips():length() == 1 then
 			players:append(friend)
 			if use.to then use.to:append(friend) end
 		end
@@ -97,6 +97,7 @@ transfer_skill.name = "transfer"
 table.insert(sgs.ai_skills, transfer_skill)
 transfer_skill.getTurnUseCard = function(self, inclusive)
 	if self.player:isKongcheng() then return end
+	if self.player:hasSkill("rende") then return end
 	if not self.player:hasSkill("kongcheng") then
 		if self:isWeak() and self:getOverflow() <= 0 then return end
 		if not self.player:hasShownOneGeneral() then return end
@@ -133,6 +134,7 @@ sgs.ai_skill_use_func.TransferCard = function(card, use, self)
 	end
 	if #cards == 0 then return end
 
+	self:sortByUseValue(cards)
 	if #friends_other > 0 then
 		local card, target = self:getCardNeedPlayer(cards, friends_other)
 		if card and target then
@@ -157,6 +159,7 @@ sgs.ai_skill_use_func.TransferCard = function(card, use, self)
 	end
 	if #cards == 0 then return end
 
+	self:sortByUseValue(cards)
 	local card, target = self:getCardNeedPlayer(cards, friends)
 	if card and target then
 		use.card = sgs.Card_Parse("@TransferCard=" .. card:getEffectiveId())
@@ -170,10 +173,17 @@ sgs.ai_skill_use_func.TransferCard = function(card, use, self)
 	end
 end
 
-sgs.ai_use_priority.TransferCard = 0
+sgs.ai_use_priority.TransferCard = 0.01
 sgs.ai_card_intention.TransferCard = -10
 
 function sgs.ai_armor_value.IronArmor(player, self)
+	if self:isWeak(player) then
+		for _, p in sgs.qlist(self.room:getOtherPlayers(player)) do
+			if p:hasShownSkill("huoji") and self:isEnemy(player, p) then
+				return 5
+			end
+		end
+	end
 	return 2.5
 end
 

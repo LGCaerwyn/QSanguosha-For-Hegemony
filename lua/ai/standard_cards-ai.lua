@@ -74,8 +74,6 @@ function sgs.isGoodTarget(player, targets, self, isSlash)
 		end
 	end
 
-
-
 	if isSlash and self and (self:hasCrossbowEffect() or self:getCardsNum("Crossbow") > 0) and self:getCardsNum("Slash") > player:getHp() then
 		return true
 	end
@@ -302,13 +300,7 @@ function SmartAI:slashIsEffective(slash, to, from, ignore_armor)
 	from = from or self.player
 	if to:hasShownSkill("kongcheng") and to:isKongcheng() then return false end
 
-	local natures = {
-		Slash = sgs.DamageStruct_Normal,
-		FireSlash = sgs.DamageStruct_Fire,
-		ThunderSlash = sgs.DamageStruct_Thunder,
-	}
-
-	local nature = natures[slash:getClassName()]
+	local nature = sgs.Slash_Natures[slash:getClassName()]
 	local damage = {}
 	damage.from = from
 	damage.to = to
@@ -456,19 +448,15 @@ function SmartAI:useCardSlash(card, use)
 
 	if not use.isDummy and self.player:hasSkill("qingnang") and self:isWeak() and self:getOverflow() == 0 then return end
 	for _, friend in ipairs(self.friends_noself) do
-		local slash_prohibit = false
-		slash_prohibit = self:slashProhibit(card, friend)
-		if self:isPriorFriendOfSlash(friend, card) then
-			if not slash_prohibit then
-				if (self.player:canSlash(friend, card, not no_distance, rangefix)
-						or (use.isDummy and (self.player:distanceTo(friend, rangefix) <= self.predictedRange)))
-					and self:slashIsEffective(card, friend) then
-					use.card = card
-					if use.to and canAppendTarget(friend) then
-						use.to:append(friend)
-					end
-					if not use.to or self.slash_targets <= use.to:length() then return end
+		if self:isPriorFriendOfSlash(friend, card) and not self:slashProhibit(card, friend) then
+			if (self.player:canSlash(friend, card, not no_distance, rangefix)
+					or (use.isDummy and (self.player:distanceTo(friend, rangefix) <= self.predictedRange)))
+				and self:slashIsEffective(card, friend) then
+				use.card = card
+				if use.to and canAppendTarget(friend) then
+					use.to:append(friend)
 				end
+				if not use.to or self.slash_targets <= use.to:length() then return end
 			end
 		end
 	end
@@ -558,11 +546,10 @@ function SmartAI:useCardSlash(card, use)
 	end
 
 	for _, friend in ipairs(self.friends_noself) do
-		local slash_prohibit = self:slashProhibit(card, friend)
 		if not self:hasHeavySlashDamage(self.player, card, friend) and (not use.to or not use.to:contains(friend))
 			and (self:getDamagedEffects(friend, self.player) and not (friend:isLord() and #self.enemies < 1) or self:needToLoseHp(friend, self.player, true, true)) then
 
-			if not slash_prohibit then
+			if not self:slashProhibit(card, friend) then
 				if ((self.player:canSlash(friend, card, not no_distance, rangefix))
 					or (use.isDummy and self.predictedRange and self.player:distanceTo(friend, rangefix) <= self.predictedRange))
 					and self:slashIsEffective(card, friend) then
@@ -1622,8 +1609,8 @@ function SmartAI:useCardDuel(duel, use)
 	end
 
 	local cmp = function(a, b)
-		local v1 = getCardsNum("Slash", a) + a:getHp()
-		local v2 = getCardsNum("Slash", b) + b:getHp()
+		local v1 = getCardsNum("Slash", a, self.player) + a:getHp()
+		local v2 = getCardsNum("Slash", b, self.player) + b:getHp()
 
 		if self:getDamagedEffects(a, self.player) then v1 = v1 + 20 end
 		if self:getDamagedEffects(b, self.player) then v2 = v2 + 20 end
@@ -2176,8 +2163,8 @@ function SmartAI:useCardCollateral(card, use)
 
 		if alevel ~= blevel then return alevel > blevel end
 
-		local anum = getCardsNum("Slash", a)
-		local bnum = getCardsNum("Slash", b)
+		local anum = getCardsNum("Slash", a, self.player)
+		local bnum = getCardsNum("Slash", b, self.player)
 
 		if anum ~= bnum then return anum < bnum end
 		return a:getHandcardNum() < b:getHandcardNum()
@@ -3003,7 +2990,7 @@ sgs.ai_card_intention.AwaitExhausted = function(self, card, from, tos)
 end
 sgs.ai_nullification.AwaitExhausted = function(self, card, from, to, positive)
 	if positive then
-		if self:isEnemy(to) then
+		if self:isEnemy(to) and self:evaluateKingdom(to) ~= "unknown" then
 			if self:getOverflow() > 0 or self:getCardsNum("Nullification") > 1 then return true end
 			if to:hasShownSkills(sgs.lose_equip_skill) and to:getEquips():length() > 0 then return true end
 			if to:getArmor() and self:needToThrowArmor(to) then return true end
