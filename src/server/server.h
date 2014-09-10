@@ -177,17 +177,24 @@ class Server : public QObject {
     Q_OBJECT
 
 public:
+    friend class BanIPDialog;
+
     explicit Server(QObject *parent);
 
-    void broadcast(const QString &msg);
+    void broadcastSystemMessage(const QString &msg);
+
     bool listen();
     void daemonize();
+
+
     Room *createNewRoom();
     void signupPlayer(ServerPlayer *player);
 
-    friend class BanIPDialog;
-
 private:
+    void notifyClient(ClientSocket *socket, QSanProtocol::CommandType command, const QVariant &arg = QVariant());
+
+    void processClientRequest(ClientSocket *socket, const QSanProtocol::Packet &signup);
+
     ServerSocket *server;
     Room *current;
     QSet<Room *> rooms;
@@ -257,4 +264,3 @@ private slots:
 };
 
 #endif
-

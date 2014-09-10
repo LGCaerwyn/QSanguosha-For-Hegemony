@@ -212,7 +212,7 @@ end
 function SmartAI:useCardSupplyShortage(card, use)
 	local enemies = self:exclude(self.enemies, card)
 
-	local zhanghe = self.room:findPlayerBySkillName("qiaobian")
+	local zhanghe = sgs.findPlayerByShownSkillName("qiaobian")
 	local zhanghe_seat = zhanghe and zhanghe:faceUp() and not zhanghe:isKongcheng() and not self:isFriend(zhanghe) and zhanghe:getSeat() or 0
 
 	if #enemies == 0 then return end
@@ -330,7 +330,7 @@ function SmartAI:isGoodChainTarget_(damageStruct)
 	if not self:damageIsEffective_(damageStruct) then return end
 	if card and card:isKindOf("FireAttack") and not self:hasTrickEffective(card, to, self.player) then return end
 
-	local jiaren_zidan = self.room:findPlayerBySkillName("jgchiying")
+	local jiaren_zidan = sgs.findPlayerByShownSkillName("jgchiying")
 	if jiaren_zidan and jiaren_zidan:isFriendWith(to) then
 		damage = 1
 	end
@@ -372,12 +372,14 @@ function SmartAI:isGoodChainTarget_(damageStruct)
 	if self:isFriend(to) then
 		good = value
 		F_count = F_count + 1
-	else
+	elseif self:isEnemy(to) then
 		bad = value
 		E_count = E_count + 1
 	end
 
 	if nature == sgs.DamageStruct_Normal then return good >= bad end
+
+	if card and card:isKindOf("FireAttack") and from:objectName() == to:objectName() then good = good - 1 end
 
 	for _, player in sgs.qlist(self.room:getAllPlayers()) do
 		local newDamageStruct = damageStruct
@@ -496,7 +498,7 @@ end
 
 sgs.ai_use_value.IronChain = 5.4
 sgs.ai_keep_value.IronChain = 3.32
-sgs.ai_use_priority.IronChain = 9.1
+sgs.ai_use_priority.IronChain = 8.5
 
 sgs.ai_skill_cardask["@fire-attack"] = function(self, data, pattern, target)
 	local cards = sgs.QList2Table(self.player:getHandcards())
@@ -572,7 +574,7 @@ function SmartAI:useCardFireAttack(fire_attack, use)
 				and self:hasTrickEffective(fire_attack, enemy)
 				and sgs.isGoodTarget(enemy, self.enemies, self)
 				and (not (enemy:hasShownSkill("jianxiong") and not self:isWeak(enemy)) and not self:getDamagedEffects(enemy, self.player)
-						and not (enemy:isChained() and not self:isGoodChainTarget(enemy)))
+						and not (enemy:isChained() and not self:isGoodChainTarget(enemy, nil, nil, nil, fire_attack)))
 	end
 
 	local enemies, targets = {}, {}
@@ -590,7 +592,7 @@ function SmartAI:useCardFireAttack(fire_attack, use)
 		end
 	end
 
-	if can_FireAttack_self and self.player:isChained() and self:isGoodChainTarget(self.player)
+	if can_FireAttack_self and self.player:isChained() and self:isGoodChainTarget(self.player, nil, nil, nil, fire_attack)
 		and self.player:getHandcardNum() > 1
 		and self:damageIsEffective(self.player, sgs.DamageStruct_Fire, self.player) and not self:cantbeHurt(self.player)
 		and self:hasTrickEffective(fire_attack, self.player) then

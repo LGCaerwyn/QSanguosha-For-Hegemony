@@ -367,10 +367,10 @@ public:
     //notification callbacks
     void toggleReadyCommand(ServerPlayer *player, const QVariant &);
     void speakCommand(ServerPlayer *player, const QVariant &message);
-    void trustCommand(ServerPlayer *player, const QVariant &arg);
-    void pauseCommand(ServerPlayer *player, const QVariant &arg);
-    void addRobotCommand(ServerPlayer *player, const QVariant &arg);
-    void fillRobotsCommand(ServerPlayer *player, const QVariant &arg);
+    void trustCommand(ServerPlayer *player, const QVariant &arg = QVariant());
+    void pauseCommand(ServerPlayer *player, const QVariant &arg = QVariant());
+    void addRobotCommand(ServerPlayer *player, const QVariant &arg = QVariant());
+    void fillRobotsCommand(ServerPlayer *player, const QVariant &arg = QVariant());
     void mirrorGuanxingStepCommand(ServerPlayer *player, const QVariant &arg);
     void changeSkinCommand(ServerPlayer *player, const QVariant &arg);
 
@@ -386,7 +386,7 @@ public:
     void pause(ServerPlayer *player, const QVariant &);
     void resume(ServerPlayer *player, const QVariant &);
 
-    void broadcastInvoke(const QSanProtocol::AbstractPacket *packet, ServerPlayer *except = NULL);
+    void broadcast(const QSanProtocol::AbstractPacket *packet, ServerPlayer *except = NULL);
     void networkDelayTestCommand(ServerPlayer *player, const QVariant &);
     inline RoomState *getRoomState() { return &_m_roomState; }
     inline Card *getCard(int cardId) const{ return _m_roomState.getCard(cardId); }

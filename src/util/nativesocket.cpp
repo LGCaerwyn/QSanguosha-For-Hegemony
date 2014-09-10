@@ -102,6 +102,17 @@ void NativeClientSocket::connectToHost() {
     socket->connectToHost(address, port);
 }
 
+void NativeClientSocket::connectToHost(const QHostAddress &address)
+{
+    ushort port = Config.value("ServerPort", 9527u).toUInt();
+    socket->connectToHost(address, port);
+}
+
+void NativeClientSocket::connectToHost(const QHostAddress &address, ushort port)
+{
+    socket->connectToHost(address, port);
+}
+
 void NativeClientSocket::getMessage() {
     while (socket->canReadLine()) {
         QByteArray msg = socket->readLine();
@@ -145,6 +156,10 @@ QString NativeClientSocket::peerName() const{
 
 QString NativeClientSocket::peerAddress() const{
     return socket->peerAddress().toString();
+}
+
+ushort NativeClientSocket::peerPort() const{
+    return socket->peerPort();
 }
 
 void NativeClientSocket::raiseError(QAbstractSocket::SocketError socket_error) {
