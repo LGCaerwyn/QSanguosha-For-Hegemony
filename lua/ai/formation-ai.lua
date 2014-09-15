@@ -1,21 +1,21 @@
 --[[********************************************************************
-	Copyright (c) 2013-2014 - QSanguosha-Hegemony Team
+	Copyright (c) 2013-2014 - QSanguosha-Rara
 
   This file is part of QSanguosha-Hegemony.
 
   This game is free software; you can redistribute it and/or
-  modify it under the terms of the GNU Lesser General Public
-  License as published by the Free Software Foundation; either
-  version 3.0 of the License, or (at your option) any later version.
+  modify it under the terms of the GNU General Public License as
+  published by the Free Software Foundation; either version 3.0
+  of the License, or (at your option) any later version.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-  Lesser General Public License for more details.
+  General Public License for more details.
 
   See the LICENSE file for more details.
 
-  QSanguosha-Hegemony Team
+  QSanguosha-Rara
 *********************************************************************]]
 
 sgs.ai_skill_invoke.tuntian = true
@@ -89,41 +89,6 @@ sgs.ai_skill_use["@@ziliang"] = function(self)
 	return "."
 end
 
---[[
-function sgs.ai_skill_invoke.ziliang(self, data)
-	self.ziliang_id = nil
-	local damage = data:toDamage()
-	if not (damage.to:getPhase() == sgs.Player_NotActive and self:needKongcheng(damage.to, true)) then
-		local ids = sgs.QList2Table(self.player:getPile("field"))
-		local cards = {}
-		for _, id in ipairs(ids) do table.insert(cards, sgs.Sanguosha:getCard(id)) end
-		for _, card in ipairs(cards) do
-			if card:isKindOf("Peach") then self.ziliang_id = card:getEffectiveId() return true end
-		end
-		for _, card in ipairs(cards) do
-			if card:isKindOf("Jink") then self.ziliang_id = card:getEffectiveId() return true end
-		end
-		self:sortByKeepValue(cards, true)
-		self.ziliang_id = cards[1]:getEffectiveId()
-		return true
-	else
-		return false
-	end
-end
-
-sgs.ai_skill_askforag.ziliang = function(self, card_ids)
-	return self.ziliang_id
-end
-
-sgs.ai_choicemade_filter.skillInvoke.ziliang = function(self, player, promptlist)
-	local damage = self.room:getTag("CurrentDamageStruct"):toDamage()
-	if damage.to and promptlist[#promptlist] == "yes" then
-		local intention = -40
-		if damage.to:getPhase() == sgs.Player_NotActive and self:needKongcheng(damage.to, true) then intention = 10 end
-		sgs.updateIntention(player, damage.to, intention)
-	end
-end
-]]
 local function huyuan_validate(self, equip_type, is_handcard)
 	local targets = {}
 	if is_handcard then targets = self.friends else targets = self.friends_noself end
@@ -325,6 +290,8 @@ local shangyi_skill = {}
 shangyi_skill.name = "shangyi"
 table.insert(sgs.ai_skills, shangyi_skill)
 shangyi_skill.getTurnUseCard = function(self)
+	if self.player:hasUsed("ShangyiCard") then return end
+	if not self:willShowForAttack() then return end
 	local card_str = ("@ShangyiCard=.&shangyi")
 	local shangyi_card = sgs.Card_Parse(card_str)
 	assert(shangyi_card)
@@ -332,10 +299,6 @@ shangyi_skill.getTurnUseCard = function(self)
 end
 
 sgs.ai_skill_use_func.ShangyiCard = function(card, use, self)
-	if not self:willShowForAttack() then
-		return
-	end
-	if self.player:hasUsed("ShangyiCard") then return end
 	self:sort(self.enemies, "handcard")
 
 	for index = #self.enemies, 1, -1 do

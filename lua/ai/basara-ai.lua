@@ -1,21 +1,21 @@
 --[[********************************************************************
-	Copyright (c) 2013-2014 - QSanguosha-Hegemony Team
+	Copyright (c) 2013-2014 - QSanguosha-Rara
 
   This file is part of QSanguosha-Hegemony.
 
   This game is free software; you can redistribute it and/or
-  modify it under the terms of the GNU Lesser General Public
-  License as published by the Free Software Foundation; either
-  version 3.0 of the License, or (at your option) any later version.
+  modify it under the terms of the GNU General Public License as
+  published by the Free Software Foundation; either version 3.0
+  of the License, or (at your option) any later version.
 
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-  Lesser General Public License for more details.
+  General Public License for more details.
 
   See the LICENSE file for more details.
 
-  QSanguosha-Hegemony Team
+  QSanguosha-Rara
 *********************************************************************]]
 
 sgs.ai_skill_invoke["userdefine:halfmaxhp"] = true
@@ -244,7 +244,7 @@ sgs.ai_skill_choice["GameRule:TriggerOrder"] = function(self, choices, data)
 			return "cancel"
 		end
 		table.removeTable(skillnames, except)
-		
+
 		if #skillnames > 0 then return skillnames[math.random(1, #skillnames)] end
 	end
 
@@ -254,6 +254,8 @@ end
 sgs.ai_skill_choice["GameRule:TurnStart"] = function(self, choices, data)
 	local choice = sgs.ai_skill_choice["GameRule:TriggerOrder"](self, choices, data)
 	if choice == "cancel" then
+		local canShowHead = string.find(choices, "GameRule_AskForGeneralShowHead")
+		local canShowDeputy = string.find(choices, "GameRule_AskForGeneralShowDeputy")
 		if canShowHead then
 			if self.player:isDuanchang() then return "GameRule_AskForGeneralShowHead" end
 			for _, p in ipairs(self.enemies) do
@@ -268,7 +270,7 @@ sgs.ai_skill_choice["GameRule:TurnStart"] = function(self, choices, data)
 
 		if not self.player:hasShownOneGeneral() then
 			local gameProcess = sgs.gameProcess():split(">>")
-			if self.player:getKingdom() == gameProcess[1] then
+			if self.player:getKingdom() == gameProcess[1] and not self:willBeCareerist() then
 				if canShowHead then return "GameRule_AskForGeneralShowDeputy"
 				elseif canShowDeputy then return "GameRule_AskForGeneralShowDeputy" end
 			end

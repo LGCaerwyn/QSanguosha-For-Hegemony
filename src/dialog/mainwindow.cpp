@@ -1,21 +1,21 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Hegemony Team
+    Copyright (c) 2013-2014 - QSanguosha-Rara
 
     This file is part of QSanguosha-Hegemony.
 
     This game is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 3.0 of the License, or (at your option) any later version.
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation; either version 3.0
+    of the License, or (at your option) any later version.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
+    General Public License for more details.
 
     See the LICENSE file for more details.
 
-    QSanguosha-Hegemony Team
+    QSanguosha-Rara
     *********************************************************************/
 
 #include "mainwindow.h"
@@ -222,7 +222,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     foreach(QAction *action, actions)
         start_scene->addButton(action);
-    
+
     ui->menuSumMenu->setAttribute(Qt::WA_TranslucentBackground);
     ui->menuGame->setAttribute(Qt::WA_TranslucentBackground);
     ui->menuView->setAttribute(Qt::WA_TranslucentBackground);
@@ -562,7 +562,7 @@ void MainWindow::repaintButtons()
     maxButton->setGeometry(width - 90, 0, 40, 33);
     normalButton->setGeometry(width - 90, 0, 40, 33);
     closeButton->setGeometry(width - 50, 0, 40, 33);
-    
+
     Qt::WindowStates state = windowState();
     if (state & Qt::WindowMaximized) {
         maxButton->setVisible(false);
@@ -1143,7 +1143,7 @@ void MainWindow::on_actionRecord_analysis_triggered() {
     table->setSelectionBehavior(QTableWidget::SelectRows);
 
     int i = 0;
-    foreach(PlayerRecordStruct *rec, record_map.values()) {
+    foreach (PlayerRecordStruct *rec, record_map) {
         QTableWidgetItem *item = new QTableWidgetItem;
         QString screen_name = Sanguosha->translate(rec->m_screenName);
         if (rec->m_statue == "robot")
