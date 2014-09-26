@@ -58,10 +58,14 @@ struct RoomLayout;
 #include <QHBoxLayout>
 #include <QMutex>
 #include <QStack>
-#ifndef Q_OS_WINRT
+#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
 #include <QtDeclarative/QDeclarativeEngine>
 #include <QtDeclarative/QDeclarativeContext>
 #include <QtDeclarative/QDeclarativeComponent>
+#else
+#include <QtQml/QQmlEngine>
+#include <QtQml/QQmlContext>
+#include <QtQml/QQmlComponent>
 #endif
 class ScriptExecutor : public QDialog {
     Q_OBJECT
@@ -358,11 +362,15 @@ private:
 
     QRectF _m_infoPlane;
 
-#ifndef Q_OS_WINRT
     // for animation effects
+#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
     QDeclarativeEngine *_m_animationEngine;
     QDeclarativeContext *_m_animationContext;
     QDeclarativeComponent *_m_animationComponent;
+#else
+    QQmlEngine *_m_animationEngine;
+    QQmlContext *_m_animationContext;
+    QQmlComponent *_m_animationComponent;
 #endif
 
     QSet<HeroSkinContainer *> m_heroSkinContainers;
