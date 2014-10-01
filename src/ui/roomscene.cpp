@@ -320,14 +320,6 @@ RoomScene::RoomScene(QMainWindow *main_window)
 
     addItem(prompt_box);
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-    m_tableBg = new QGraphicsPixmapItem(NULL, this);
-#else
-    m_tableBg = new QGraphicsPixmapItem();
-    addItem(m_tableBg);
-#endif
-    m_tableBg->setZValue(-100000);
-
     m_rolesBoxBackground.load("image/system/state.png");
     m_rolesBox = new QGraphicsPixmapItem;
     addItem(m_rolesBox);
@@ -815,6 +807,7 @@ void RoomScene::adjustItems() {
     dashboard->setX(displayRegion.x());
     dashboard->setWidth(displayRegion.width());
     dashboard->setY(displayRegion.height() - dashboard->boundingRect().height());
+    dashboard->adjustCards(false);
 
     // set infoplane
     _m_infoPlane.setWidth(displayRegion.width() * _m_roomLayout->m_infoPlaneWidthPercentage);
@@ -836,12 +829,7 @@ void RoomScene::adjustItems() {
 
     m_tablew = displayRegion.width();// - infoPlane.width();
     m_tableh = displayRegion.height();// - dashboard->boundingRect().height();
-    QPixmap tableBg = QPixmap(Config.TableBgImage)
-        .scaled(m_tablew, m_tableh, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
     m_tableh -= _m_roomLayout->m_photoDashboardPadding;
-    //m_tableBg->setPos(padding, padding);
-    m_tableBg->setPos(0, 0);
-    m_tableBg->setPixmap(tableBg);
     updateTable();
     updateRolesBox();
     setChatBoxVisible(chat_box_widget->isVisible());
@@ -2856,18 +2844,6 @@ void RoomScene::startInXs() {
     if (return_to_start_scene) return_to_start_scene->hide();
 }
 
-void RoomScene::changeTableBg() {
-    QRectF displayRegion = sceneRect();
-
-    QPixmap tableBg = QPixmap(Config.TableBgImage)
-        .scaled(displayRegion.width(), displayRegion.height(),
-        Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    m_tableh -= _m_roomLayout->m_photoDashboardPadding;
-    m_tableBg->setPos(0, 0);
-    m_tableBg->setPixmap(tableBg);
-    updateTable();
-}
-
 void RoomScene::stopHeroSkinChangingAnimations()
 {
     foreach (Photo *const &photo, photos) {
@@ -3925,6 +3901,7 @@ void RoomScene::doLightboxAnimation(const QString &, const QStringList &args) {
         }
     }
     else if (word.startsWith("skill=")) {
+        removeItem(lightbox);
         const QString hero = word.mid(6);
         const QString skill = args.value(1, QString());
 
@@ -3948,7 +3925,7 @@ void RoomScene::doLightboxAnimation(const QString &, const QStringList &args) {
         animationWindow->setColor(Qt::transparent);
         object->setParentItem(animationWindow->contentItem());
         animationWindow->show();
-        connect(object, SIGNAL(animationCompleted()), animationWindow, SLOT(hide()));
+        connect(object, SIGNAL(animationCompleted()), animationWindow, SLOT(close()));
         connect(object, SIGNAL(animationCompleted()), animationWindow, SLOT(deleteLater()));
 #endif
     }

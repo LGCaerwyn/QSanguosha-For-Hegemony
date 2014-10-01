@@ -68,7 +68,7 @@ class FitView : public QGraphicsView {
 public:
     FitView(QGraphicsScene *scene) : QGraphicsView(scene) {
         setSceneRect(Config.Rect);
-        setRenderHints(QPainter::TextAntialiasing | QPainter::Antialiasing);
+        setRenderHints(QPainter::TextAntialiasing | QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
 
 #if !defined(QT_NO_OPENGL) && defined(USING_OPENGL)
         if (QGLFormat::hasOpenGL()) {
@@ -115,30 +115,46 @@ public:
     virtual void resizeEvent(QResizeEvent *event) {
         QGraphicsView::resizeEvent(event);
         MainWindow *main_window = qobject_cast<MainWindow *>(parentWidget());
+        QRectF newSceneRect(0, 0, event->size().width(), event->size().height());
         if (scene()->inherits("RoomScene")) {
             RoomScene *room_scene = qobject_cast<RoomScene *>(scene());
-            QRectF newSceneRect(0, 0, event->size().width(), event->size().height());
+            if (newSceneRect.width() < 1020 || newSceneRect.height() < 680) {
+                qreal sx = 1020 / newSceneRect.width();
+                qreal sy = 680 / newSceneRect.height();
+                qreal scale = sx > sy ? sx : sy;
+                newSceneRect.setWidth(newSceneRect.width() * scale);
+                newSceneRect.setHeight(newSceneRect.height() * scale);
+            }
             room_scene->setSceneRect(newSceneRect);
-            setSceneRect(room_scene->sceneRect());
-            if (newSceneRect != room_scene->sceneRect())
+            if (newSceneRect.size() != event->size())
                 fitInView(room_scene->sceneRect(), Qt::KeepAspectRatio);
             else
-                this->resetTransform();
+                resetTransform();
+            setSceneRect(room_scene->sceneRect());
             room_scene->adjustItems();
-            main_window->setBackgroundBrush(false);
+            main_window->setBackgroundBrush(Config.TableBgImage);
             return;
         }
-        else if (scene()->inherits("StartScene")) {
+        if (scene()->inherits("StartScene")) {
             StartScene *start_scene = qobject_cast<StartScene *>(scene());
-            QRectF newSceneRect(-event->size().width() / 2, -event->size().height() / 2,
-                event->size().width(), event->size().height());
+            if (newSceneRect.width() < 1024 || newSceneRect.height() < 706) {
+                qreal sx = 1024 / newSceneRect.width();
+                qreal sy = 706 / newSceneRect.height();
+                qreal scale = sx > sy ? sx : sy;
+                newSceneRect.setWidth(newSceneRect.width() * scale);
+                newSceneRect.setHeight(newSceneRect.height() * scale);
+            }
+            newSceneRect.moveTopLeft(newSceneRect.bottomRight() * -0.5);
             start_scene->setSceneRect(newSceneRect);
-            setSceneRect(start_scene->sceneRect());
-            if (newSceneRect != start_scene->sceneRect())
+            if (newSceneRect.size() != event->size())
                 fitInView(start_scene->sceneRect(), Qt::KeepAspectRatio);
+            else
+                resetTransform();
+            setSceneRect(start_scene->sceneRect());
         }
+
         if (main_window)
-            main_window->setBackgroundBrush(true);
+            main_window->setBackgroundBrush(Config.BackgroundImage);
     }
 };
 
@@ -203,7 +219,7 @@ MainWindow::MainWindow(QWidget *parent)
     config_dialog = new ConfigDialog(this);
     connect(ui->actionConfigure, SIGNAL(triggered()), config_dialog, SLOT(show()));
     connect(config_dialog, SIGNAL(bg_changed()), this, SLOT(changeBackground()));
-    connect(config_dialog, SIGNAL(tableBg_changed()), this, SLOT(changeTableBg()));
+    connect(config_dialog, SIGNAL(tableBg_changed()), this, SLOT(changeBackground()));
 
     connect(ui->actionAbout_Qt, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
     connect(ui->actionAcknowledgement_2, SIGNAL(triggered()), this, SLOT(on_actionAcknowledgement_triggered()));
@@ -312,17 +328,9 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
         } else {
             bool can_move = true;
             if (view && view->scene()) {
-                if (view->scene()->inherits("StartScene")) {
-                    StartScene *scene = qobject_cast<StartScene *>(view->scene());
-                    QPointF pos = view->mapToScene(event->pos());
-                    if (scene->itemAt(pos, QTransform()))
-                        can_move = false;
-                } else if (view->scene()->inherits("RoomScene")) {
-                    RoomScene *scene = qobject_cast<RoomScene *>(view->scene());
-                    QPointF pos = view->mapToScene(event->pos());
-                    if (scene->itemAt(pos, QTransform()) && scene->itemAt(pos, QTransform())->zValue() > -100000)
-                        can_move = false;
-                }
+                QPointF pos = view->mapToScene(event->pos());
+                if (scene->itemAt(pos, QTransform()))
+                    can_move = false;
             }
             if (can_move) {
                 isLeftPressDown = true;
@@ -417,17 +425,9 @@ void MainWindow::mouseDoubleClickEvent(QMouseEvent *event)
 {
     bool can_change = true;
     if (view && view->scene()) {
-        if (view->scene()->inherits("StartScene")) {
-            StartScene *scene = qobject_cast<StartScene *>(view->scene());
-            QPointF pos = view->mapToScene(event->pos());
-            if (scene->itemAt(pos, QTransform()))
-                can_change = false;
-        } else if (view->scene()->inherits("RoomScene")) {
-            RoomScene *scene = qobject_cast<RoomScene *>(view->scene());
-            QPointF pos = view->mapToScene(event->pos());
-            if (scene->itemAt(pos, QTransform()) && scene->itemAt(pos, QTransform())->zValue() > -100000)
-                can_change = false;
-        }
+        QPointF pos = view->mapToScene(event->pos());
+        if (scene->itemAt(pos, QTransform()))
+            can_change = false;
     }
     if (can_change) {
         if (windowState() & Qt::WindowMaximized)
@@ -544,7 +544,7 @@ void MainWindow::roundCorners()
         QPainterPath path;
         QRect windowRect = mask.rect();
         QRect maskRect(windowRect.x(), windowRect.y(), windowRect.width(), windowRect.height());
-        path.addRoundedRect(maskRect, 5, 5);
+        path.addRoundedRect(maskRect, S_CORNER_SIZE, S_CORNER_SIZE);
         painter.setRenderHint(QPainter::Antialiasing);
 
         painter.fillPath(path, Qt::black);
@@ -931,37 +931,28 @@ void MainWindow::on_actionAbout_Us_triggered() {
     dialog->show();
 }
 
-void MainWindow::setBackgroundBrush(bool centerAsOrigin) {
+void MainWindow::setBackgroundBrush(const QString &pixmapPath) {
     if (scene) {
-        QPixmap pixmap(Config.BackgroundImage);
+        QPixmap pixmap(pixmapPath);
         QBrush brush(pixmap);
-        qreal sx = (qreal)width() / qreal(pixmap.width());
-        qreal sy = (qreal)height() / qreal(pixmap.height());
 
         QTransform transform;
-        if (centerAsOrigin)
-            transform.translate(-(qreal)width() / 2, -(qreal)height() / 2);
-        transform.scale(sx, sy);
+        transform.translate(-S_CORNER_SIZE, -S_CORNER_SIZE);
+        if (!scene->inherits("RoomScene"))
+            transform.translate(-scene->width() / 2, -scene->height() / 2);
+        transform.scale((scene->width() + 2 * S_CORNER_SIZE) / pixmap.width(), (scene->height() + 2 * S_CORNER_SIZE) / pixmap.height());
         brush.setTransform(transform);
         scene->setBackgroundBrush(brush);
     }
 }
 
 void MainWindow::changeBackground() {
-    bool centerAsOrigin = scene != NULL && !scene->inherits("RoomScene");
-    setBackgroundBrush(centerAsOrigin);
+    setBackgroundBrush(scene->inherits("RoomScene") ? Config.TableBgImage : Config.BackgroundImage);
 
     if (scene->inherits("StartScene")) {
         StartScene *start_scene = qobject_cast<StartScene *>(scene);
         start_scene->setServerLogBackground();
     }
-}
-
-void MainWindow::changeTableBg() {
-    if (!scene->inherits("RoomScene"))
-        return;
-
-    RoomSceneInstance->changeTableBg();
 }
 
 void MainWindow::on_actionFullscreen_triggered()
@@ -1309,11 +1300,12 @@ void MainWindow::onVersionInfomationGotten()
 {
     while (!versionInfomationReply->atEnd()) {
         QString line = versionInfomationReply->readLine();
-        line.replace('\n', "");
+        line.remove('\n');
 
-        QStringList texts = line.split("|", QString::SkipEmptyParts);
+        QStringList texts = line.split('|', QString::SkipEmptyParts);
 
-        Q_ASSERT(texts.size() == 2);
+        if(texts.size() != 2)
+            return;
 
         QString key = texts.at(0);
         QString value = texts.at(1);
