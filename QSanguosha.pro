@@ -53,10 +53,13 @@ SOURCES += \
     src/dialog/playercarddialog.cpp \
     src/dialog/rule-summary.cpp \
     src/dialog/UpdateChecker.cpp \
-    src/dialog/FlatDialog.cpp \
     src/dialog/UdpDetectorDialog.cpp \
     src/dialog/AvatarModel.cpp \
     src/dialog/GeneralModel.cpp \
+    src/dialog/serverdialog.cpp \
+    src/dialog/FlatDialog.cpp \
+    src/dialog/banipdialog.cpp \
+    src/dialog/banlistdialog.cpp \
     src/package/exppattern.cpp \
     src/package/formation.cpp \
     src/package/jiange-defense.cpp \
@@ -160,10 +163,13 @@ HEADERS += \
     src/dialog/playercarddialog.h \
     src/dialog/rule-summary.h \
     src/dialog/UpdateChecker.h \
-    src/dialog/FlatDialog.h \
     src/dialog/UdpDetectorDialog.h \
     src/dialog/AvatarModel.h \
     src/dialog/GeneralModel.h \
+    src/dialog/serverdialog.h \
+    src/dialog/FlatDialog.h \
+    src/dialog/banipdialog.h \
+    src/dialog/banlistdialog.h \
     src/package/exppattern.h \
     src/package/formation.h \
     src/package/jiange-defense.h \
@@ -233,8 +239,17 @@ FORMS += \
     src/dialog/cardoverview.ui \
     src/dialog/configdialog.ui \
     src/dialog/connectiondialog.ui \
-    src/dialog/generaloverview.ui \
-    src/dialog/mainwindow.ui
+    src/dialog/generaloverview.ui
+
+win32 {
+    FORMS += src/dialog/mainwindow.ui
+}
+else: android {
+    FORMS += src/dialog/mainwindow.ui
+}
+else {
+    FORMS += src/dialog/mainwindow_nonwin.ui
+}
 
 INCLUDEPATH += include
 INCLUDEPATH += src/client
@@ -498,9 +513,12 @@ CONFIG(opengl){
 
 TRANSLATIONS += builds/sanguosha.ts
 
-!exists($$PWD/sanguosha.qm) {
-    system("lrelease builds/sanguosha.ts -qm $$PWD/sanguosha.qm")
-}
+system("lrelease builds/sanguosha.ts -qm $$PWD/sanguosha.qm")
+
+SWIG_bin = "swig"
+win32: SWIG_bin = "$$PWD/tools/swig/swig.exe"
+
+system("$$SWIG_bin -c++ -lua $$PWD/swig/sanguosha.i")
 
 OTHER_FILES += \
     sanguosha.qss \

@@ -25,7 +25,11 @@
 #include "client.h"
 #include "generaloverview.h"
 #include "cardoverview.h"
+#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
 #include "ui_mainwindow.h"
+#else
+#include "ui_mainwindow_nonwin.h"
+#endif
 #include "rule-summary.h"
 #include "pixmapanimation.h"
 #include "record-analysis.h"
@@ -35,6 +39,8 @@
 #include "audio.h"
 #include "StyleHelper.h"
 #include "uiUtils.h"
+#include "serverdialog.h"
+#include "banipdialog.h"
 
 #include <lua.hpp>
 #include <QGraphicsView>
@@ -80,7 +86,7 @@ public:
 #endif
     }
 
-#ifndef Q_OS_ANDROID
+#ifdef Q_OS_WIN
     virtual void mousePressEvent(QMouseEvent *event) {
         MainWindow *parent = qobject_cast<MainWindow *>(parentWidget());
         if (parent)
@@ -203,7 +209,9 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     setWindowTitle(tr("QSanguosha-Hegemony") + " " + Sanguosha->getVersion());
+#ifdef Q_OS_WIN
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint);
+#endif
     setAttribute(Qt::WA_TranslucentBackground);
 
     setMouseTracking(true);
@@ -239,6 +247,7 @@ MainWindow::MainWindow(QWidget *parent)
     foreach(QAction *action, actions)
         start_scene->addButton(action);
 
+#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
     ui->menuSumMenu->setAttribute(Qt::WA_TranslucentBackground);
     ui->menuGame->setAttribute(Qt::WA_TranslucentBackground);
     ui->menuView->setAttribute(Qt::WA_TranslucentBackground);
@@ -246,6 +255,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->menuDIY->setAttribute(Qt::WA_TranslucentBackground);
     ui->menuCheat->setAttribute(Qt::WA_TranslucentBackground);
     ui->menuHelp->setAttribute(Qt::WA_TranslucentBackground);
+#endif
 
     view = new FitView(scene);
 
@@ -259,13 +269,15 @@ MainWindow::MainWindow(QWidget *parent)
 
     addAction(ui->actionFullscreen);
 
+#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
     menu = new QPushButton(this);
     menu->setMenu(ui->menuSumMenu);
     menu->setProperty("control", true);
     StyleHelper::getInstance()->setIcon(menu, QChar(0xf0c9), 15);
     menu->setToolTip(tr("<font color=%1>Config</font>").arg(Config.SkillDescriptionInToolTipColor.name()));
+#endif
 
-#ifndef Q_OS_ANDROID
+#if defined(Q_OS_WIN)
     minButton = new QPushButton(this);
     minButton->setProperty("control", true);
 
@@ -296,7 +308,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(closeButton, SIGNAL(clicked()), this, SLOT(close()));
 
     menuBar()->hide();
-#else
+#elif defined(Q_OS_ANDROID)
     ui->menuSumMenu->removeAction(ui->menuView->menuAction());
 #endif
     repaintButtons();
@@ -313,7 +325,7 @@ MainWindow::MainWindow(QWidget *parent)
     systray = NULL;
 }
 
-#ifndef Q_OS_ANDROID
+#ifdef Q_OS_WIN
 void MainWindow::mousePressEvent(QMouseEvent *event)
 {
     if (windowState() & (Qt::WindowMaximized | Qt::WindowFullScreen))
@@ -554,7 +566,7 @@ void MainWindow::roundCorners()
 
 void MainWindow::repaintButtons()
 {
-#ifndef Q_OS_ANDROID
+#if defined(Q_OS_WIN)
     if (!minButton || !maxButton || !normalButton || !closeButton || !menu)
         return;
     int width = this->width();
@@ -580,7 +592,7 @@ void MainWindow::repaintButtons()
         minButton->setVisible(true);
         menu->setGeometry(width - 170, 0, 40, 33);
     }
-#else
+#elif defined(Q_OS_ANDROID)
     if (menu)
         menu->setGeometry(width() - 50, 0, 40, 33);
 #endif
@@ -614,7 +626,6 @@ void MainWindow::gotoScene(QGraphicsScene *scene) {
     view->setScene(scene);
     QResizeEvent e(QSize(view->size().width(), view->size().height()), view->size());
     view->resizeEvent(&e);
-    changeBackground();
 }
 
 void MainWindow::on_actionExit_triggered() {
@@ -870,6 +881,9 @@ void MainWindow::on_actionNever_nullify_my_trick_toggled(bool checked) {
 }
 
 void MainWindow::on_actionAbout_triggered() {
+    if (scene == NULL)
+        return;
+
     if (about_window == NULL) {
         // Cao Cao's pixmap
         QString content = "<center><img src='image/system/shencc.png'> <br /> </center>";
@@ -918,11 +932,10 @@ void MainWindow::on_actionAbout_triggered() {
 
         about_window->addContent(content);
         about_window->addCloseButton(tr("OK"));
-        about_window->shift(scene->inherits("RoomScene") ? scene->width() : 0,
-                            scene->inherits("RoomScene") ? scene->height() : 0);
         about_window->keepWhenDisappear();
     }
 
+    about_window->shift(scene->sceneRect().center());
     about_window->appear();
 }
 
@@ -936,11 +949,12 @@ void MainWindow::setBackgroundBrush(const QString &pixmapPath) {
         QPixmap pixmap(pixmapPath);
         QBrush brush(pixmap);
 
+        qreal width = scene->width() + 2 * S_CORNER_SIZE;
+        qreal height = scene->height() + 2 * S_CORNER_SIZE;
+        QPointF center = scene->sceneRect().center();
         QTransform transform;
-        transform.translate(-S_CORNER_SIZE, -S_CORNER_SIZE);
-        if (!scene->inherits("RoomScene"))
-            transform.translate(-scene->width() / 2, -scene->height() / 2);
-        transform.scale((scene->width() + 2 * S_CORNER_SIZE) / pixmap.width(), (scene->height() + 2 * S_CORNER_SIZE) / pixmap.height());
+        transform.translate(-center.x() - width / 2.0, -center.y() - height / 2.0);
+        transform.scale(width / pixmap.width(), height / pixmap.height());
         brush.setTransform(transform);
         scene->setBackgroundBrush(brush);
     }
@@ -1035,14 +1049,16 @@ void MainWindow::on_actionBroadcast_triggered() {
 }
 
 void MainWindow::on_actionAcknowledgement_triggered() {
+    if (scene == NULL)
+        return;
+
     Window *window = new Window(QString(), QSize(1000, 677), "image/system/acknowledgement.png");
     scene->addItem(window);
 
     Button *button = window->addCloseButton(tr("OK"));
     button->moveBy(-85, -35);
     window->setZValue(32766);
-    window->shift(scene && scene->inherits("RoomScene") ? scene->width() : 0,
-        scene && scene->inherits("RoomScene") ? scene->height() : 0);
+    window->shift(scene->sceneRect().center());
 
     window->appear();
 }
@@ -1224,6 +1240,9 @@ void MainWindow::on_actionRecord_analysis_triggered() {
 }
 
 void MainWindow::on_actionAbout_fmod_triggered() {
+    if (scene == NULL)
+        return;
+
     QString content = tr("FMOD is a proprietary audio library made by Firelight Technologies");
     content.append("<p align='center'> <img src='image/logo/fmod.png' /> </p> <br/>");
 
@@ -1240,13 +1259,15 @@ void MainWindow::on_actionAbout_fmod_triggered() {
     window->addContent(content);
     window->addCloseButton(tr("OK"));
     window->setZValue(32766);
-    window->shift(scene && scene->inherits("RoomScene") ? scene->width() : 0,
-        scene && scene->inherits("RoomScene") ? scene->height() : 0);
+    window->shift(scene->sceneRect().center());
 
     window->appear();
 }
 
 void MainWindow::on_actionAbout_Lua_triggered() {
+    if (scene == NULL)
+        return;
+
     QString content = tr("Lua is a powerful, fast, lightweight, embeddable scripting language.");
     content.append("<p align='center'> <img src='image/logo/lua.png' /> </p> <br/>");
 
@@ -1262,13 +1283,15 @@ void MainWindow::on_actionAbout_Lua_triggered() {
     window->addContent(content);
     window->addCloseButton(tr("OK"));
     window->setZValue(32766);
-    window->shift(scene && scene->inherits("RoomScene") ? scene->width() : 0,
-        scene && scene->inherits("RoomScene") ? scene->height() : 0);
+    window->shift(scene->sceneRect().center());
 
     window->appear();
 }
 
 void MainWindow::on_actionAbout_GPLv3_triggered() {
+    if (scene == NULL)
+        return;
+
     QString content = tr("The GNU General Public License is the most widely used free software license, which guarantees end users the freedoms to use, study, share, and modify the software.");
     content.append("<p align='center'> <img src='image/logo/gplv3.png' /> </p> <br/>");
 
@@ -1281,14 +1304,13 @@ void MainWindow::on_actionAbout_GPLv3_triggered() {
     window->addContent(content);
     window->addCloseButton(tr("OK"));
     window->setZValue(32766);
-    window->shift(scene && scene->inherits("RoomScene") ? scene->width() : 0,
-        scene && scene->inherits("RoomScene") ? scene->height() : 0);
+    window->shift(scene->sceneRect().center());
 
     window->appear();
 }
 
 void MainWindow::on_actionManage_Ban_IP_triggered(){
-    BanIPDialog *dlg = new BanIPDialog(this, server);
+    BanIpDialog *dlg = new BanIpDialog(this, server);
     if (server) {
         connect(server, SIGNAL(newPlayer(ServerPlayer*)), dlg, SLOT(addPlayer(ServerPlayer*)));
     }
