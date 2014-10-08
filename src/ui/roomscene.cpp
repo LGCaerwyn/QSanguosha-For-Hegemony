@@ -25,7 +25,7 @@
 #include "cardoverview.h"
 #include "distanceviewdialog.h"
 #include "playercarddialog.h"
-#include "FreeChooseDialog.h"
+#include "freechoosedialog.h"
 #include "window.h"
 #include "button.h"
 #include "cardcontainer.h"
@@ -33,18 +33,18 @@
 #include "indicatoritem.h"
 #include "pixmapanimation.h"
 #include "audio.h"
-#include "SkinBank.h"
+#include "skinbank.h"
 #include "record-analysis.h"
 #include "choosegeneralbox.h"
-#include "ChooseOptionsBox.h"
-#include "ChooseTriggerOrderBox.h"
-#include "uiUtils.h"
+#include "chooseoptionsbox.h"
+#include "choosetriggerorderbox.h"
+#include "uiutils.h"
 #include "qsanbutton.h"
-#include "GuanxingBox.h"
-#include "BubbleChatBox.h"
-#include "PlayerCardBox.h"
-#include "StyleHelper.h"
-#include "HeroSkinContainer.h"
+#include "guanxingbox.h"
+#include "bubblechatbox.h"
+#include "playercardbox.h"
+#include "stylehelper.h"
+#include "heroskincontainer.h"
 
 #include <QPropertyAnimation>
 #include <QParallelAnimationGroup>
@@ -105,6 +105,10 @@ RoomScene::RoomScene(QMainWindow *main_window)
     _m_commonLayout = &(G_ROOM_SKIN.getCommonLayout());
 
     m_skillButtonSank = false;
+
+    setBackgroundBrush(QBrush(QPixmap(Config.TableBgImage)));
+
+    connect(this, SIGNAL(sceneRectChanged(QRectF)), this, SLOT(onSceneRectChanged(QRectF)));
 
     // create photos
     for (int i = 0; i < player_count - 1; i++) {
@@ -794,7 +798,9 @@ void RoomScene::adjustItems() {
         double scale = qMax(sx, sy);
         displayRegion.setBottom(scale * displayRegion.height());
         displayRegion.setRight(scale * displayRegion.width());
+        disconnect(this, SIGNAL(sceneRectChanged(QRectF)), this, SLOT(onSceneRectChanged(QRectF)));
         setSceneRect(displayRegion);
+        connect(this, SIGNAL(sceneRectChanged(QRectF)), this, SLOT(onSceneRectChanged(QRectF)));
     }
 
     int padding = _m_roomLayout->m_scenePadding;
@@ -3594,6 +3600,11 @@ void RoomScene::speak() {
         chatBox->append(QString("<p style=\"margin:3px 2px;\">%1</p>").arg(line));
     }
     chatEdit->clear();
+}
+
+void RoomScene::onSceneRectChanged(const QRectF &)
+{
+    adjustItems();
 }
 
 void RoomScene::fillCards(const QList<int> &card_ids, const QList<int> &disabled_ids) {

@@ -23,13 +23,13 @@
 
 #include "photo.h"
 #include "dashboard.h"
-#include "TablePile.h"
+#include "tablepile.h"
 #include "card.h"
 #include "client.h"
 #include "aux-skills.h"
 #include "clientlogbox.h"
 #include "chatwidget.h"
-#include "SkinBank.h"
+#include "skinbank.h"
 #include "sprite.h"
 #include "qsanbutton.h"
 
@@ -373,6 +373,8 @@ private:
     QSet<HeroSkinContainer *> m_heroSkinContainers;
 
 private slots:
+    void onSceneRectChanged(const QRectF &);
+
     void fillCards(const QList<int> &card_ids, const QList<int> &disabled_ids = QList<int>());
     void updateSkillButtons();
     void acquireSkill(const ClientPlayer *player, const QString &skill_name, const bool &head = true);
