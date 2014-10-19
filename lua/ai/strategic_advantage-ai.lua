@@ -601,7 +601,7 @@ function SmartAI:useCardThreatenEmperor(card, use)
 	if not card:isAvailable(self.player) then return end
 	use.card = card
 end
-sgs.ai_use_value.ThreatenEmperor = 6.6
+sgs.ai_use_value.ThreatenEmperor = 8
 sgs.ai_use_priority.ThreatenEmperor = 0
 sgs.ai_keep_value.ThreatenEmperor = 3.2
 
@@ -625,7 +625,7 @@ function SmartAI:useCardImperialOrder(card, use)
 	if not card:isAvailable(self.player) then return end
 	use.card = card
 end
-sgs.ai_use_value.ImperialOrder = 8.2
+sgs.ai_use_value.ImperialOrder = 2.9
 sgs.ai_use_priority.ImperialOrder = 8.9
 sgs.ai_keep_value.ImperialOrder = 0
 
@@ -643,4 +643,123 @@ end
 sgs.ai_skill_choice.imperial_order = function(self)
 	if self:needToLoseHp() then return "losehp" end
 	return "show"
+end
+
+
+--JadeSeal
+sgs.ai_skill_use["@@JadeSeal!"] = function(self, prompt, method)
+	local card = sgs.cloneCard("known_both")
+	local dummyuse = { isDummy = true, to = sgs.SPlayerList() }
+	self:useCardKnownBoth(card, dummyuse)
+	local tos = {}
+	if dummyuse.card and not dummyuse.to:isEmpty() then
+		for _, to in sgs.qlist(dummyuse.to) do
+			table.insert(tos, to:objectName())
+		end
+		return "known_both:JadeSeal[no_suit:0]=.&->" .. table.concat(tos, "+")
+	end
+	self:sort(self.enemies, "handcard")
+	self.enemies = sgs.reverse(self.enemies)
+	local targets = sgs.PlayerList()
+	for _, enemy in ipairs(self.enemies) do
+		if self:getKnownNum(enemy, self.player) ~= enemy:getHandcardNum() and card:targetFilter(targets, enemy, self.player) and not targets:contains(enemy) then
+			targets:append(enemy)
+			table.insert(tos, enemy:objectName())
+			self.knownboth_choice[enemy:objectName()] = "handcards"
+		end
+	end
+	self:sort(self.friends_noself, "handcard")
+	self.friends_noself = sgs.reverse(self.friends_noself)
+	for _, friend in ipairs(self.friends_noself) do
+		if self:getKnownNum(friend, self.player) ~= friend:getHandcardNum() and card:targetFilter(targets, friend, self.player) and not targets:contains(friend) then
+			targets:append(friend)
+			table.insert(tos, friend:objectName())
+			self.knownboth_choice[friend:objectName()] = "handcards"
+		end
+	end
+
+	local players = sgs.qlist(self.room:getOtherPlayers(self.player))
+	self:sort(players, "handcard")
+	players = sgs.reverse(players)
+	for _, player in ipairs(players) do
+		if card:targetFilter(targets, player, self.player) and not targets:contains(player) then
+			targets:append(player)
+			table.insert(tos, player:objectName())
+			self.knownboth_choice[player:objectName()] = "handcards"
+		end
+	end
+	assert(#tos > 0)
+	return "known_both:JadeSeal[no_suit:0]=.&->" .. table.concat(tos, "+")
+end
+
+sgs.ai_use_priority.JadeSeal = 5.6
+sgs.ai_keep_value.JadeSeal = 2.02
+
+--Halberd
+sgs.ai_view_as.Halberd = function(card, player, card_place)
+	if card_place == sgs.Player_PlaceHand and card:isKindOf("Slash") and not player:hasFlag("Global_HalberdFailed") and not player:hasFlag("slashDisableExtraTarget")
+		and sgs.Sanguosha:getCurrentCardUseReason() == sgs.CardUseStruct_CARD_USE_REASON_RESPONSE_USE and player:getMark("Equips_Nullified_to_Yourself") == 0 then
+		return "@HalberdCard=."
+	end
+end
+
+local Halberd_skill = {}
+Halberd_skill.name = "Halberd"
+table.insert(sgs.ai_skills, Halberd_skill)
+Halberd_skill.getTurnUseCard = function(self, inclusive)
+	if self.player:hasFlag("Global_HalberdFailed") or not self:slashIsAvailable() or self.player:getMark("Equips_Nullified_to_Yourself") > 0 then return end
+	if self:getCard("Slash") then
+		local HalberdCard = sgs.Card_Parse("@HalberdCard=.")
+		assert(HalberdCard)
+		return HalberdCard
+	end
+end
+
+sgs.ai_skill_use_func.HalberdCard = function(card, use, self)
+	local slash = self:getCard("Slash")
+	self:useCardSlash(slash, use)
+	if use.card and use.card:isKindOf("Analeptic") then
+		return
+	end
+	use.card = card
+	if use.to then use.to = sgs.SPlayerList() end
+end
+
+
+sgs.ai_use_priority.HalberdCard = sgs.ai_use_priority.Slash + 0.1
+
+sgs.ai_skill_playerchosen.Halberd = sgs.ai_skill_playerchosen.slash_extra_targets
+
+sgs.ai_skill_cardask["@halberd"] = function(self)
+	local cards = sgs.QList2Table(self.player:getCards("Slash"))
+	self:sortByUseValue(cards)
+	for _, slash in ipairs(cards) do
+		if slash:isKindOf("HalberdCard") then continue end
+		local use = { to = sgs.SPlayerList() }
+		local target
+		if self.player:hasFlag("slashTargetFix") then
+			for _, player in sgs.qlist(self.room:getOtherPlayers(self.player)) do
+				if player:hasFlag("SlashAssignee") then
+					if self.player:canSlash(player, slash) then
+						use.to:append(player)
+						target = player
+						break
+					else
+						return "."
+					end
+				end
+			end
+		end
+		self:useCardSlash(slash, use)
+		local targets = {}
+		for _, p in sgs.qlist(use.to) do
+			table.insert(targets, p:objectName())
+		end
+		if #targets > 0 and (not target or table.contains(targets, target:objectName())) then return slash:toString() .. "->" .. table.concat(targets, "+") end
+	end
+	return "."
+end
+
+function sgs.ai_weapon_value.Halberd(self, enemy, player)
+	return 2.1
 end

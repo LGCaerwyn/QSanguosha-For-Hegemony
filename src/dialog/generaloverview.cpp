@@ -19,21 +19,23 @@
     *********************************************************************/
 
 #include "generaloverview.h"
-#include "ui_generaloverview.h"
 #include "engine.h"
+#include "ui_generaloverview.h"
 #include "settings.h"
-#include "skinbank.h"
-#include "clientstruct.h"
-#include "client.h"
+#include "clientplayer.h"
 #include "generalmodel.h"
-#include "util.h"
+#include "SkinBank.h"
+#include "stylehelper.h"
 
-#include <QMessageBox>
-#include <QRadioButton>
+#include <QHBoxLayout>
 #include <QGroupBox>
+#include <QAbstractButton>
+#include <QCheckBox>
+#include <QSpinBox>
 #include <QCommandLinkButton>
 #include <QClipboard>
-#include <QFile>
+#include <QMessageBox>
+#include <QScrollBar>
 
 static QLayout *HLay(QWidget *left, QWidget *right) {
     QHBoxLayout *layout = new QHBoxLayout;
@@ -43,14 +45,12 @@ static QLayout *HLay(QWidget *left, QWidget *right) {
 }
 
 GeneralSearch::GeneralSearch(GeneralOverview *parent)
-    : QDialog(parent)
+    : FlatDialog(parent)
 {
     setWindowTitle(tr("Search..."));
 
-    QVBoxLayout *layout = new QVBoxLayout;
     layout->addWidget(createInfoTab());
     layout->addLayout(createButtonLayout());
-    setLayout(layout);
 
     connect(this, SIGNAL(search(bool, QString, QString, QStringList, QStringList, int, int, QStringList)),
         parent, SLOT(startSearch(bool, QString, QString, QStringList, QStringList, int, int, QStringList)));
@@ -202,12 +202,15 @@ QWidget *GeneralSearch::createInfoTab() {
 QLayout *GeneralSearch::createButtonLayout() {
     QHBoxLayout *button_layout = new QHBoxLayout;
 
+    QPushButton *cancelButton = new QPushButton(tr("Cancel"));
     QPushButton *clear_button = new QPushButton(tr("Clear"));
     QPushButton *ok_button = new QPushButton(tr("OK"));
 
+    button_layout->addWidget(cancelButton);
     button_layout->addWidget(clear_button);
     button_layout->addWidget(ok_button);
 
+    connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
     connect(ok_button, SIGNAL(clicked()), this, SLOT(accept()));
     connect(clear_button, SIGNAL(clicked()), this, SLOT(clearAll()));
 
@@ -272,10 +275,17 @@ GeneralOverview *GeneralOverview::getInstance(QWidget *main_window) {
 }
 
 GeneralOverview::GeneralOverview(QWidget *parent)
-    : QDialog(parent), ui(new Ui::GeneralOverview), all_generals(NULL)
+    : FlatDialog(parent, false), ui(new Ui::GeneralOverview), all_generals(NULL)
 {
     ui->setupUi(this);
     origin_window_title = windowTitle();
+    connect(this, SIGNAL(windowTitleChanged(QString)), ui->titleLabel, SLOT(setText(QString)));
+    connect(ui->closeButton, SIGNAL(clicked()), this, SLOT(reject()));
+
+    const QString style = StyleHelper::styleSheetOfScrollBar();
+    ui->tableView->verticalScrollBar()->setStyleSheet(style);
+    ui->skillTextEdit->verticalScrollBar()->setStyleSheet(style);
+    ui->scrollArea->verticalScrollBar()->setStyleSheet(style);
 
     button_layout = new QVBoxLayout;
 

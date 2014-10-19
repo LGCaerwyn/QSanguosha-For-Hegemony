@@ -383,7 +383,7 @@ local invoke_qianhuan = function(self, use)
 	if use.card:isKindOf("Lightning") then return end
 	local to = use.to:first()
 	if use.card:isKindOf("Slash") and not self:slashIsEffective(use.card, to, use.from) then return end
-	if not self:hasTrickEffective(use.card, to, use.from) then return end
+	if use.card:isKindOf("TrickCard") and not self:hasTrickEffective(use.card, to, use.from) then return end
 	if (self.player:getPile("sorcery"):length() == 1) and not (use.card:isKindOf("Slash") or use.card:isKindOf("duel") or use.card:isKindOf("FireAttack")) then return false end
 	if to and to:objectName() == self.player:objectName() then
 		return not (use.from and (use.from:objectName() == to:objectName()
@@ -410,7 +410,7 @@ local function will_discard_zhendu(self)
 			and (not self:damageIsEffective(current, nil, self.player) or current:getHp() > 2 or (getCardsNum("Peach", current, self.player) > 1 and not self:isWeak(current))) then
 			local slash = sgs.cloneCard("slash")
 			local trend = 3
-			if current:hasWeapon("axe") then trend = trend - 1
+			if current:hasWeapon("Axe") then trend = trend - 1
 			elseif current:hasShownSkills("liegong|tieqi|wushuang|niaoxiang") then trend = trend - 0.4 end
 			for _, enemy in ipairs(self.enemies) do
 				if ((enemy:getHp() < 3 and enemy:getHandcardNum() < 3) or (enemy:getHandcardNum() < 2)) and current:canSlash(enemy) and not self:slashProhibit(slash, enemy, current)

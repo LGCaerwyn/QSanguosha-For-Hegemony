@@ -144,7 +144,7 @@ function SmartAI:shouldUseAnaleptic(target, card_use)
 	if self.player:hasSkill("liegong") and self.player:getPhase() == sgs.Player_Play and (hcard >= self.player:getHp() or hcard <= self.player:getAttackRange()) then return true end
 	if self.player:hasSkill("tieqi") then return true end
 
-	if self.player:hasWeapon("axe") and self.player:getCards("he"):length() > 4 then return true end
+	if self.player:hasWeapon("Axe") and self.player:getCards("he"):length() > 4 then return true end
 
 	if self.player:hasSkill("wushuang") then
 		if getKnownCard(target, player, "Jink", true, "he") >= 2 then return false end
@@ -198,7 +198,7 @@ end
 
 sgs.dynamic_value.benefit.Analeptic = true
 
-sgs.ai_use_value.Analeptic = 5.98
+sgs.ai_use_value.Analeptic = 6.2
 sgs.ai_keep_value.Analeptic = 4.1
 sgs.ai_use_priority.Analeptic = 3.0
 
@@ -260,7 +260,7 @@ function SmartAI:useCardSupplyShortage(card, use)
 	end
 end
 
-sgs.ai_use_value.SupplyShortage = 7
+sgs.ai_use_value.SupplyShortage = 6.5
 sgs.ai_keep_value.SupplyShortage = 3.48
 sgs.ai_use_priority.SupplyShortage = 0.5
 sgs.ai_card_intention.SupplyShortage = 120

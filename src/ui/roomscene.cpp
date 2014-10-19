@@ -24,7 +24,6 @@
 #include "engine.h"
 #include "cardoverview.h"
 #include "distanceviewdialog.h"
-#include "playercarddialog.h"
 #include "freechoosedialog.h"
 #include "window.h"
 #include "button.h"
@@ -72,8 +71,15 @@
 #include <QInputDialog>
 #include <QScrollBar>
 #if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
-#include <QtQuick/QQuickItem>
-#include <QtQuick/QQuickWindow>
+#include <QQmlEngine>
+#include <QQmlContext>
+#include <QQmlComponent>
+#include <QQuickItem>
+#include <QQuickWindow>
+#else
+#include <QtDeclarative/QDeclarativeEngine>
+#include <QtDeclarative/QDeclarativeContext>
+#include <QtDeclarative/QDeclarativeComponent>
 #endif
 
 using namespace QSanProtocol;
@@ -754,9 +760,8 @@ void RoomScene::_getSceneSizes(QSize &minSize, QSize &maxSize) {
     }
 }
 
-void RoomScene::adjustItems() {
-    QRectF displayRegion = sceneRect();
-
+void RoomScene::onSceneRectChanged(const QRectF &rect)
+{
     // switch between default & compact skin depending on scene size
     QSanSkinFactory &factory = QSanSkinFactory::getInstance();
     QString skinName = factory.getCurrentSkinName();
@@ -764,7 +769,7 @@ void RoomScene::adjustItems() {
     QSize minSize, maxSize;
     _getSceneSizes(minSize, maxSize);
     if (skinName == factory.S_DEFAULT_SKIN_NAME) {
-        if (displayRegion.width() < minSize.width() || displayRegion.height() < minSize.height()) {
+        if (rect.width() < minSize.width() || rect.height() < minSize.height()) {
             QThread *thread = QCoreApplication::instance()->thread();
             thread->blockSignals(true);
             factory.switchSkin(factory.S_COMPACT_SKIN_NAME);
@@ -775,7 +780,7 @@ void RoomScene::adjustItems() {
         }
     }
     else if (skinName == factory.S_COMPACT_SKIN_NAME) {
-        if (displayRegion.width() > maxSize.width() && displayRegion.height() > maxSize.height()) {
+        if (rect.width() > maxSize.width() && rect.height() > maxSize.height()) {
             QThread *thread = QCoreApplication::instance()->thread();
             thread->blockSignals(true);
             factory.switchSkin(factory.S_DEFAULT_SKIN_NAME);
@@ -789,40 +794,38 @@ void RoomScene::adjustItems() {
     // update the sizes since we have reloaded the skin.
     _getSceneSizes(minSize, maxSize);
 
-    if (displayRegion.left() != 0 || displayRegion.top() != 0
-        || displayRegion.bottom() < minSize.height()
-        || displayRegion.right() < minSize.width()) {
-        displayRegion.setLeft(0); displayRegion.setTop(0);
-        double sy = minSize.height() / displayRegion.height();
-        double sx = minSize.width() / displayRegion.width();
+    QRectF newRect(rect);
+    if (rect.height() < minSize.height() || rect.width() < minSize.width()) {
+        double sy = minSize.height() / rect.height();
+        double sx = minSize.width() / rect.width();
         double scale = qMax(sx, sy);
-        displayRegion.setBottom(scale * displayRegion.height());
-        displayRegion.setRight(scale * displayRegion.width());
+        newRect.setHeight(scale * rect.height());
+        newRect.setWidth(scale * rect.width());
         disconnect(this, SIGNAL(sceneRectChanged(QRectF)), this, SLOT(onSceneRectChanged(QRectF)));
-        setSceneRect(displayRegion);
+        setSceneRect(newRect);
         connect(this, SIGNAL(sceneRectChanged(QRectF)), this, SLOT(onSceneRectChanged(QRectF)));
     }
 
     int padding = _m_roomLayout->m_scenePadding;
-    displayRegion.moveLeft(displayRegion.x() + padding);
-    displayRegion.moveTop(displayRegion.y() + padding);
-    displayRegion.setWidth(displayRegion.width() - padding * 2);
-    displayRegion.setHeight(displayRegion.height() - padding * 2);
+    newRect.moveLeft(newRect.x() + padding);
+    newRect.moveTop(newRect.y() + padding);
+    newRect.setWidth(newRect.width() - padding * 2);
+    newRect.setHeight(newRect.height() - padding * 2);
 
     // set dashboard
-    dashboard->setX(displayRegion.x());
-    dashboard->setWidth(displayRegion.width());
-    dashboard->setY(displayRegion.height() - dashboard->boundingRect().height());
+    dashboard->setX(newRect.x());
+    dashboard->setWidth(newRect.width());
+    dashboard->setY(newRect.height() - dashboard->boundingRect().height());
     dashboard->adjustCards(false);
 
     // set infoplane
-    _m_infoPlane.setWidth(displayRegion.width() * _m_roomLayout->m_infoPlaneWidthPercentage);
-    _m_infoPlane.moveRight(displayRegion.right());
-    _m_infoPlane.setTop(displayRegion.top() + _m_roomLayout->m_roleBoxHeight);
+    _m_infoPlane.setWidth(newRect.width() * _m_roomLayout->m_infoPlaneWidthPercentage);
+    _m_infoPlane.moveRight(newRect.right());
+    _m_infoPlane.setTop(newRect.top() + _m_roomLayout->m_roleBoxHeight);
     _m_infoPlane.setBottom(dashboard->y() - _m_roomLayout->m_chatTextBoxHeight);
     m_rolesBoxBackground = m_rolesBoxBackground.scaled(_m_infoPlane.width(), _m_roomLayout->m_roleBoxHeight);
     m_rolesBox->setPixmap(m_rolesBoxBackground);
-    m_rolesBox->setPos(_m_infoPlane.left(), displayRegion.top());
+    m_rolesBox->setPos(_m_infoPlane.left(), newRect.top());
 
     log_box_widget->setPos(_m_infoPlane.topLeft());
     log_box->resize(_m_infoPlane.width(), _m_infoPlane.height() * _m_roomLayout->m_logBoxHeightPercentage);
@@ -833,8 +836,8 @@ void RoomScene::adjustItems() {
     chat_widget->setPos(_m_infoPlane.right() - chat_widget->boundingRect().width(),
         chat_edit_widget->y() + (_m_roomLayout->m_chatTextBoxHeight - chat_widget->boundingRect().height()) / 2);
 
-    m_tablew = displayRegion.width();// - infoPlane.width();
-    m_tableh = displayRegion.height();// - dashboard->boundingRect().height();
+    m_tablew = newRect.width();// - infoPlane.width();
+    m_tableh = newRect.height();// - dashboard->boundingRect().height();
     m_tableh -= _m_roomLayout->m_photoDashboardPadding;
     updateTable();
     updateRolesBox();
@@ -1358,7 +1361,7 @@ void RoomScene::keyReleaseEvent(QKeyEvent *event) {
     case Qt::Key_F3: dashboard->beginSorting(); break;
     case Qt::Key_F4: dashboard->reverseSelection(); break;
     case Qt::Key_F5: {
-        adjustItems();
+        onSceneRectChanged(sceneRect());
         break;
     }
     case Qt::Key_F6: {
@@ -3602,11 +3605,6 @@ void RoomScene::speak() {
     chatEdit->clear();
 }
 
-void RoomScene::onSceneRectChanged(const QRectF &)
-{
-    adjustItems();
-}
-
 void RoomScene::fillCards(const QList<int> &card_ids, const QList<int> &disabled_ids) {
     bringToFront(card_container);
     card_container->fillCards(card_ids, disabled_ids);
@@ -3930,9 +3928,8 @@ void RoomScene::doLightboxAnimation(const QString &, const QStringList &args) {
         QQuickItem *object = qobject_cast<QQuickItem *>(_m_animationComponent->create(_m_animationContext));
         connect(object, SIGNAL(animationCompleted()), object, SLOT(deleteLater()));
         QQuickWindow *animationWindow = new QQuickWindow;
-        animationWindow->setFlags(Qt::FramelessWindowHint);
-        QMainWindow *mainWindow = qobject_cast<QMainWindow *>(parent());
-        animationWindow->setGeometry(mainWindow->geometry());
+        animationWindow->setFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+        animationWindow->setGeometry(main_window->geometry());
         animationWindow->setColor(Qt::transparent);
         object->setParentItem(animationWindow->contentItem());
         animationWindow->show();

@@ -41,34 +41,32 @@
 #include "uiutils.h"
 #include "serverdialog.h"
 #include "banipdialog.h"
+#include "cardeditor.h"
+#include "flatdialog.h"
+#include "connectiondialog.h"
+#include "configdialog.h"
+#include "window.h"
 
 #include <lua.hpp>
 #include <QGraphicsView>
-#include <QGraphicsItem>
-#include <QGraphicsPixmapItem>
-#include <QGraphicsTextItem>
-#include <QVariant>
 #include <QMessageBox>
-#include <QTime>
 #include <QProcess>
-#include <QCheckBox>
 #include <QFileDialog>
 #include <QDesktopServices>
 #include <QSystemTrayIcon>
-#include <QInputDialog>
 #include <QLabel>
-#include <QStatusBar>
-#include <QGroupBox>
-#include <QToolButton>
-#include <QCommandLinkButton>
-#include <QFormLayout>
-#include <QNetworkReply>
 #include <QBitmap>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
 
 #if !defined(QT_NO_OPENGL) && defined(USING_OPENGL)
+#if QT_VERSION >= QT_VERSION_CHECK(5, 4, 0)
+#include <QtOpenGL/QOpenGLWidget>
+#else
 #include <QtOpenGL/QGLWidget>
 #endif
-
+#endif
 
 class FitView : public QGraphicsView {
 public:
@@ -124,10 +122,15 @@ public:
         if (scene) {
             QRectF newSceneRect(0, 0, event->size().width(), event->size().height());
             scene->setSceneRect(newSceneRect);
-            if (scene->sceneRect().size() != event->size())
-                fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
-            else
+            if (scene->sceneRect().size() != event->size()) {
+                QSizeF from(scene->sceneRect().size());
+                QSizeF to(event->size());
+                QTransform transform;
+                transform.scale(to.width() / from.width(), to.height() / from.height());
+                setTransform(transform);
+            } else {
                 resetTransform();
+            }
             setSceneRect(scene->sceneRect());
         }
 
@@ -136,43 +139,6 @@ public:
             main_window->fitBackgroundBrush();
     }
 };
-
-#ifdef AUDIO_SUPPORT
-
-SoundTestBox::SoundTestBox(QWidget *parent /* = NULL */)
-    :QDialog(parent){
-    QDir dir("audio/test/");
-    QStringList entry_list = dir.entryList();
-    entry_list.removeOne(".");
-    entry_list.removeOne("..");
-
-    QHBoxLayout *total_layout = new QHBoxLayout;
-    QList<QPushButton *> btns;
-
-    foreach(QString name, entry_list){
-        if (name.contains(".")){
-            QPushButton *btn = new QPushButton(name);
-            btn->setObjectName(name);
-            btns << btn;
-        }
-    }
-
-    foreach(QPushButton *btn, btns){
-        total_layout->addWidget(btn);
-        connect(btn, SIGNAL(clicked()), this, SLOT(btn_clicked()));
-    }
-    setLayout(total_layout);
-}
-
-void SoundTestBox::btn_clicked(){
-    QObject *btn = sender();
-    QString name = "audio/test/" + btn->objectName();
-    if (QFile::exists(name)){
-        Audio::play(name);
-    }
-}
-
-#endif
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), isLeftPressDown(false),
@@ -286,12 +252,14 @@ MainWindow::MainWindow(QWidget *parent)
 #endif
     repaintButtons();
 
+#ifndef Q_OS_ANDROID
     QPropertyAnimation *animation = new QPropertyAnimation(this, "windowOpacity");
     animation->setDuration(1000);
     animation->setStartValue(0);
     animation->setEndValue(1);
     animation->setEasingCurve(QEasingCurve::OutCurve);
     animation->start(QAbstractAnimation::DeleteWhenStopped);
+#endif
 
     start_scene->showOrganization();
 
@@ -520,6 +488,7 @@ void MainWindow::fetchUpdateInformation()
 
 void MainWindow::roundCorners()
 {
+#ifndef Q_OS_ANDROID
     QBitmap mask(size());
     if (windowState() & (Qt::WindowMaximized | Qt::WindowFullScreen)) {
         mask.fill(Qt::black);
@@ -535,6 +504,7 @@ void MainWindow::roundCorners()
         painter.fillPath(path, Qt::black);
     }
     setMask(mask);
+#endif
 }
 
 void MainWindow::repaintButtons()
@@ -922,12 +892,10 @@ void MainWindow::fitBackgroundBrush() {
         QBrush brush(scene->backgroundBrush());
         QPixmap pixmap(brush.texture());
 
-        qreal width = scene->width() + 2 * S_CORNER_SIZE;
-        qreal height = scene->height() + 2 * S_CORNER_SIZE;
-        QPointF center = scene->sceneRect().center();
+        QRectF rect(scene->sceneRect());
         QTransform transform;
-        transform.translate(-center.x() - width / 2.0, -center.y() - height / 2.0);
-        transform.scale(width / pixmap.width(), height / pixmap.height());
+        transform.translate(-rect.left(), -rect.top());
+        transform.scale(rect.width() / pixmap.width(), rect.height() / pixmap.height());
         brush.setTransform(transform);
         scene->setBackgroundBrush(brush);
     }
@@ -1347,24 +1315,24 @@ void MainWindow::onChangeLogGotten()
 
 void MainWindow::on_actionCheckUpdate_triggered()
 {
-    QDialog *dialog = new QDialog(this);
+    FlatDialog *dialog = new FlatDialog(this);
     dialog->setWindowTitle(tr("Check Update"));
 
-    QHBoxLayout *layout = new QHBoxLayout;
     UpdateChecker *widget = new UpdateChecker;
-    connect(dialog, SIGNAL(finished(int)), widget, SLOT(deleteLater()));
     widget->fill(updateInfomation);
-    layout->addWidget(widget);
-    dialog->setLayout(layout);
+    dialog->mainLayout()->addWidget(widget);
+
+    dialog->addCloseButton();
 
     dialog->show();
 }
 
-void MainWindow::on_actionSound_Test_triggered(){
-#ifdef AUDIO_SUPPORT
-    SoundTestBox *soundtestbox = new SoundTestBox(this);
-    soundtestbox->show();
-#else
-    QMessageBox::warning(this, tr("Warning"), tr("Audio support is disabled when compiled"));
-#endif
+
+void MainWindow::on_actionCard_editor_triggered()
+{
+    static CardEditor *editor;
+    if (editor == NULL)
+        editor = new CardEditor(this);
+
+    editor->show();
 }

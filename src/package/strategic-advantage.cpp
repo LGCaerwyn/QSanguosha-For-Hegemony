@@ -32,20 +32,17 @@ Blade::Blade(Card::Suit suit, int number)
 class BladeSkill : public WeaponSkill {
 public:
     BladeSkill() : WeaponSkill("Blade") {
-        events << TargetChosen << CardFinished;
+        events << CardUsed << CardFinished;
         frequency = Compulsory;
     }
 
-    virtual QStringList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer* &ask_who) const{
+    virtual QStringList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer* &) const{
         CardUseStruct use = data.value<CardUseStruct>();
-        if (triggerEvent == TargetChosen) {
-            if (!WeaponSkill::triggerable(use.from))
+        if (triggerEvent == CardUsed) {
+            if (!WeaponSkill::triggerable(player))
                 return QStringList();
-
-            if (use.to.contains(player) && use.card->isKindOf("Slash") && player->getMark("Equips_of_Others_Nullified_to_You") == 0) {
-                ask_who = use.from;
+            if (use.card->isKindOf("Slash"))
                 return QStringList(objectName());
-            }
         } else {
             if (use.card->isKindOf("Slash")) {
                 foreach (ServerPlayer *p, use.to) {
@@ -65,18 +62,26 @@ public:
     }
 
     virtual bool effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *) const{
-        QStringList blade_use = player->property("blade_use").toStringList();
         CardUseStruct use = data.value<CardUseStruct>();
-        if (blade_use.contains(use.card->toString()))
-            return false;
+        bool play_animation = false;
+        foreach (ServerPlayer *p, use.to) {
+            if (p->getMark("Equips_of_Others_Nullified_to_You") > 0)
+                continue;
+            QStringList blade_use = p->property("blade_use").toStringList();
+            if (blade_use.contains(use.card->toString()))
+                return false;
 
-        blade_use << use.card->toString();
-        room->setPlayerProperty(player, "blade_use", blade_use);
+            blade_use << use.card->toString();
+            room->setPlayerProperty(p, "blade_use", blade_use);
 
-        if (!player->hasShownAllGenerals())
-            room->setEmotion(use.from, "weapon/blade");
+            if (!p->hasShownAllGenerals())
+                play_animation = true;
 
-        room->setPlayerDisableShow(player, "hd", "Blade"); // this effect should always make sense.
+            room->setPlayerDisableShow(p, "hd", "Blade"); // this effect should always make sense.
+        }
+
+        if (play_animation)
+            room->setEmotion(player, "weapon/blade");
 
         return false;
     }
@@ -87,6 +92,112 @@ Halberd::Halberd(Card::Suit suit, int number)
 {
     setObjectName("Halberd");
 }
+
+HalberdCard::HalberdCard() {
+    target_fixed = true;
+    m_skillName = "Halberd";
+}
+
+const Card *HalberdCard::validate(CardUseStruct &card_use) const{
+    ServerPlayer *player = card_use.from;
+    Room *room = player->getRoom();
+    room->setPlayerFlag(player, "HalberdUse");
+    room->setPlayerFlag(player, "HalberdSlashFilter");
+    bool use = room->askForUseCard(player, "slash", "@halberd");
+    if (!use) {
+        room->setPlayerFlag(player, "Global_HalberdFailed");
+        room->setPlayerFlag(player, "-HalberdUse");
+        room->setPlayerFlag(player, "-HalberdSlashFilter");
+        return NULL;
+    }
+    return this;
+}
+
+const Card *HalberdCard::validateInResponse(ServerPlayer *player) const{
+    Room *room = player->getRoom();
+    room->setPlayerFlag(player, "HalberdUse");
+    room->setPlayerFlag(player, "HalberdSlashFilter");
+    bool use = room->askForUseCard(player, "slash", "@halberd");
+    if (!use) {
+        room->setPlayerFlag(player, "Global_HalberdFailed");
+        room->setPlayerFlag(player, "-HalberdUse");
+        room->setPlayerFlag(player, "-HalberdSlashFilter");
+        return NULL;
+    }
+    return this;
+}
+
+void HalberdCard::onUse(Room *, const CardUseStruct &) const{
+    // do nothing
+}
+
+class HalberdSkill: public ZeroCardViewAsSkill {
+public:
+    HalberdSkill(): ZeroCardViewAsSkill("Halberd") {
+    }
+
+    virtual bool isEnabledAtPlay(const Player *player) const{
+        return !player->hasFlag("Global_HalberdFailed")
+            && Slash::IsAvailable(player) && player->getMark("Equips_Nullified_to_Yourself") == 0;
+    }
+
+    virtual bool isEnabledAtResponse(const Player *player, const QString &pattern) const{
+        return !player->hasFlag("Global_HalberdFailed") && !player->hasFlag("slashDisableExtraTarget")
+            && Sanguosha->currentRoomState()->getCurrentCardUseReason() == CardUseStruct::CARD_USE_REASON_RESPONSE_USE
+            && pattern == "slash" && player->getMark("Equips_Nullified_to_Yourself") == 0;
+    }
+
+    virtual const Card *viewAs() const{
+        return new HalberdCard;
+    }
+};
+
+class HalberdTrigger: public WeaponSkill {
+public:
+    HalberdTrigger(): WeaponSkill("Halberd-trigger") {
+        events << SlashMissed << SlashEffected;
+        global = true;
+        frequency = Compulsory;
+    }
+
+    virtual QStringList triggerable(TriggerEvent triggerEvent, Room *, ServerPlayer *, QVariant &data, ServerPlayer* &) const{
+        if (triggerEvent == SlashMissed) {
+            SlashEffectStruct effect = data.value<SlashEffectStruct>();
+            if (effect.slash->hasFlag("halberd_slash"))
+                effect.slash->setFlags("halberd_slash_missed");
+        } else if (triggerEvent == SlashEffected) {
+            SlashEffectStruct effect = data.value<SlashEffectStruct>();
+            if (effect.slash->hasFlag("halberd_slash_missed"))
+                return QStringList(objectName());
+        }
+        return QStringList();
+    }
+
+    virtual bool effect(TriggerEvent, Room *room, ServerPlayer *, QVariant &data, ServerPlayer *) const{
+        SlashEffectStruct effect = data.value<SlashEffectStruct>();
+        LogMessage log;
+        log.type = "#HalberdNullified";
+        log.from = effect.from;
+        log.to << effect.to;
+        log.arg = "Halberd";
+        log.arg2 = effect.slash->objectName();
+        room->sendLog(log);
+        return true;
+    }
+};
+
+class HalberdTargetMod: public TargetModSkill {
+public:
+    HalberdTargetMod(): TargetModSkill("halberd-target") {
+    }
+
+    virtual int getExtraTargetNum(const Player *from, const Card *) const{
+        if (from->hasFlag("HalberdUse"))
+            return from->getMark("halberd_count");
+        else
+            return 0;
+    }
+};
 
 Breastplate::Breastplate(Card::Suit suit, int number)
     : Armor(suit, number)
@@ -104,8 +215,7 @@ public:
 
     virtual QStringList triggerable(TriggerEvent, Room *, ServerPlayer *player, QVariant &data, ServerPlayer* &) const{
         DamageStruct damage = data.value<DamageStruct>();
-        if (ArmorSkill::triggerable(player) && damage.damage >= player->getHp()
-            && player->getArmor() && player->canDiscard(player, player->getArmor()->getEffectiveId()))
+        if (ArmorSkill::triggerable(player) && damage.damage >= player->getHp() && player->getArmor())
             return QStringList(objectName());
         return QStringList();
     }
@@ -115,7 +225,8 @@ public:
     }
 
     virtual bool effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *) const{
-        room->throwCard(player->getArmor(), player);
+        CardMoveReason reason(CardMoveReason::S_REASON_NATURAL_ENTER, player->objectName(), objectName(), QString());
+        room->moveCardTo(player->getArmor(), NULL, Player::DiscardPile, reason, true);
         DamageStruct damage = data.value<DamageStruct>();
         LogMessage log;
         log.type = "#Breastplate";
@@ -295,6 +406,68 @@ JadeSeal::JadeSeal(Card::Suit suit, int number)
     : Treasure(suit, number){
     setObjectName("JadeSeal");
 }
+
+class JadeSealViewAsSkill: public ZeroCardViewAsSkill {
+public:
+    JadeSealViewAsSkill(): ZeroCardViewAsSkill("JadeSeal") {
+        response_pattern = "@@JadeSeal!";
+    }
+
+    virtual const Card *viewAs() const{
+        KnownBoth *kb = new KnownBoth(Card::NoSuit, 0);
+        kb->setSkillName(objectName());
+        return kb;
+    }
+};
+
+class JadeSealSkill: public TreasureSkill {
+public:
+    JadeSealSkill(): TreasureSkill("JadeSeal") {
+        events << DrawNCards << EventPhaseStart;
+        view_as_skill = new JadeSealViewAsSkill;
+    }
+
+    virtual QStringList triggerable(TriggerEvent triggerEvent, Room *, ServerPlayer *player, QVariant &, ServerPlayer* &) const{
+        if (!TreasureSkill::triggerable(player) || !player->hasShownOneGeneral())
+            return QStringList();
+        if (triggerEvent == DrawNCards) {
+            return QStringList(objectName());
+        } else if (triggerEvent == EventPhaseStart && player->getPhase() == Player::Play) {
+            KnownBoth *kb = new KnownBoth(Card::NoSuit, 0);
+            kb->setSkillName(objectName());
+            kb->deleteLater();
+            if (kb->isAvailable(player))
+                return QStringList(objectName());
+        }
+        return QStringList();
+    }
+
+    virtual bool cost(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &, ServerPlayer *) const{
+        if (triggerEvent == DrawNCards)
+            return true;
+        if (!room->askForUseCard(player, "@@JadeSeal!", "@JadeSeal")) {
+            KnownBoth *kb = new KnownBoth(Card::NoSuit, 0);
+            kb->setSkillName(objectName());
+            QList<ServerPlayer *> targets;
+            foreach (ServerPlayer *p, room->getOtherPlayers(player)) {
+                if (!player->isProhibited(p, kb) && (!p->isKongcheng() || !p->hasShownAllGenerals()))
+                    targets << p;
+            }
+            if (targets.isEmpty()) {
+                delete kb;
+            } else {
+                ServerPlayer *target = targets.at(qrand() % targets.length());
+                room->useCard(CardUseStruct(kb, player, target), false);
+            }
+        }
+        return false;
+    }
+
+    virtual bool effect(TriggerEvent, Room *, ServerPlayer *, QVariant &data, ServerPlayer *) const{
+        data = data.toInt() + 1;
+        return false;
+    }
+};
 
 Drowning::Drowning(Suit suit, int number)
     : SingleTargetTrick(suit, number)
@@ -640,6 +813,8 @@ void FightTogether::onUse(Room *room, const CardUseStruct &card_use) const{
 void FightTogether::onEffect(const CardEffectStruct &effect) const{
     Room *room = effect.from->getRoom();
     if (!effect.to->isChained()) {
+        if (!effect.to->canBeChainedBy(effect.from))
+            return;
         effect.to->setChained(true);
         room->setEmotion(effect.to, "chain");
         room->broadcastProperty(effect.to, "chained");
@@ -973,10 +1148,12 @@ StrategicAdvantagePackage::StrategicAdvantagePackage()
         << new WoodenOx(Card::Diamond, 5)
         << new Halberd(Card::Diamond, 12);
 
-    skills << new BladeSkill
+    skills << new IronArmorSkill
+           << new BladeSkill
+           << new JadeSealSkill
            << new BreastplateSkill
-           << new IronArmorSkill
            << new WoodenOxSkill << new WoodenOxTriggerSkill
+           << new HalberdSkill << new HalberdTrigger << new HalberdTargetMod
            << new LureTigerSkill << new LureTigerProhibit
            << new ThreatenEmperorSkill;
     insertRelatedSkills("lure_tiger_effect", "#lure_tiger-prohibit");
@@ -985,6 +1162,7 @@ StrategicAdvantagePackage::StrategicAdvantagePackage()
         card->setParent(this);
 
     addMetaObject<WoodenOxCard>();
+    addMetaObject<HalberdCard>();
 }
 
 ADD_PACKAGE(StrategicAdvantage)

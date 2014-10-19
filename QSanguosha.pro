@@ -40,7 +40,6 @@ SOURCES += \
     src/core/version.cpp \
     src/core/json.cpp \
     src/dialog/aboutus.cpp \
-    src/dialog/cardbutton.cpp \
     src/dialog/cardeditor.cpp \
     src/dialog/cardoverview.cpp \
     src/dialog/configdialog.cpp \
@@ -50,7 +49,6 @@ SOURCES += \
     src/dialog/freechoosedialog.cpp \
     src/dialog/generaloverview.cpp \
     src/dialog/mainwindow.cpp \
-    src/dialog/playercarddialog.cpp \
     src/dialog/rule-summary.cpp \
     src/dialog/updatechecker.cpp \
     src/dialog/udpdetectordialog.cpp \
@@ -150,7 +148,6 @@ HEADERS += \
     src/core/version.h \
     src/core/json.h \
     src/dialog/aboutus.h \
-    src/dialog/cardbutton.h \
     src/dialog/cardeditor.h \
     src/dialog/cardoverview.h \
     src/dialog/configdialog.h \
@@ -160,7 +157,6 @@ HEADERS += \
     src/dialog/freechoosedialog.h \
     src/dialog/generaloverview.h \
     src/dialog/mainwindow.h \
-    src/dialog/playercarddialog.h \
     src/dialog/rule-summary.h \
     src/dialog/updatechecker.h \
     src/dialog/udpdetectordialog.h \
@@ -513,12 +509,14 @@ CONFIG(opengl){
 
 TRANSLATIONS += builds/sanguosha.ts
 
-system("lrelease builds/sanguosha.ts -qm $$PWD/sanguosha.qm")
+!build_pass{
+    system("lrelease builds/sanguosha.ts -qm $$PWD/sanguosha.qm")
 
-SWIG_bin = "swig"
-win32: SWIG_bin = "$$PWD/tools/swig/swig.exe"
+    SWIG_bin = "swig"
+    win32: SWIG_bin = "$$PWD/tools/swig/swig.exe"
 
-system("$$SWIG_bin -c++ -lua $$PWD/swig/sanguosha.i")
+    system("$$SWIG_bin -c++ -lua $$PWD/swig/sanguosha.i")
+}
 
 OTHER_FILES += \
     sanguosha.qss \

@@ -18,19 +18,13 @@
     QSanguosha-Rara
     *********************************************************************/
 
-#ifndef _MAIN_WINDOW_H
-#define _MAIN_WINDOW_H
-
-#include "engine.h"
-#include "connectiondialog.h"
-#include "configdialog.h"
-#include "window.h"
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QSettings>
-#include <QComboBox>
-#include <QCheckBox>
-#include <QSpinBox>
+#include <QDialog>
+
+#include "version.h"
 
 namespace Ui {
     class MainWindow;
@@ -41,9 +35,10 @@ class QGraphicsScene;
 class QSystemTrayIcon;
 class Server;
 class QTextEdit;
-class QGroupBox;
-class RoomItem;
 class QNetworkReply;
+class ConnectionDialog;
+class ConfigDialog;
+class Window;
 
 class BroadcastBox : public QDialog {
     Q_OBJECT
@@ -63,18 +58,6 @@ class BackLoader {
 public:
     static void preload();
 };
-
-#ifdef AUDIO_SUPPORT
-class SoundTestBox :public QDialog{
-    Q_OBJECT
-
-public:
-    SoundTestBox(QWidget *parent = NULL);
-
-private slots:
-    void btn_clicked();
-};
-#endif
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -159,7 +142,6 @@ private slots:
     void on_actionStart_Server_triggered();
     void on_actionExit_triggered();
     void on_actionCheckUpdate_triggered();
-    void on_actionSound_Test_triggered();
 
     void checkVersion(const QString &server_version, const QString &server_mod);
     void networkError(const QString &error_msg);
@@ -177,5 +159,5 @@ signals:
     void about_to_close();
 };
 
-#endif
+#endif //MAINWINDOW_H
 
