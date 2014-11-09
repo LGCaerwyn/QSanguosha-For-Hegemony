@@ -203,6 +203,11 @@ bool ServerPlayer::askForSkillInvoke(const QString &skill_name, const QVariant &
     return room->askForSkillInvoke(this, skill_name, data);
 }
 
+bool ServerPlayer::askForSkillInvoke(const Skill *skill, const QVariant &data) {
+    Q_ASSERT(skill != NULL);
+    return room->askForSkillInvoke(this, skill->objectName(), data);
+}
+
 QList<int> ServerPlayer::forceToDiscard(int discard_num, bool include_equip, bool is_discard) {
     QList<int> to_discard;
 
@@ -1752,13 +1757,11 @@ void ServerPlayer::summonFriends(const ArrayType type) {
     switch (type) {
     case Siege: {
         if (isFriendWith(getNextAlive()) && isFriendWith(getLastAlive())) return;
-        QString prompt = "SiegeSummon";
         bool failed = true;
         if (!isFriendWith(getNextAlive())) {
             ServerPlayer *target = qobject_cast<ServerPlayer *>(getNextAlive(2));
             if (!target->hasShownOneGeneral()) {
-                if (!target->willBeFriendWith(this))
-                    prompt += "!";
+                QString prompt = target->willBeFriendWith(this) ? "SiegeSummon" : "SiegeSummon!";
                 bool success = room->askForSkillInvoke(target, prompt);
                 LogMessage log;
                 log.type = "#SummonResult";
@@ -1774,8 +1777,7 @@ void ServerPlayer::summonFriends(const ArrayType type) {
         if (!isFriendWith(getLastAlive())) {
             ServerPlayer *target = qobject_cast<ServerPlayer *>(getLastAlive(2));
             if (!target->hasShownOneGeneral()) {
-                if (!target->willBeFriendWith(this))
-                    prompt += "!";
+                QString prompt = target->willBeFriendWith(this) ? "SiegeSummon" : "SiegeSummon!";
                 bool success = room->askForSkillInvoke(target, prompt);
                 LogMessage log;
                 log.type = "#SummonResult";
@@ -1800,10 +1802,7 @@ void ServerPlayer::summonFriends(const ArrayType type) {
             if (isFriendWith(target))
                 continue;
             else if (!target->hasShownOneGeneral()) {
-                QString prompt = "FormationSummon";
-                if (!target->willBeFriendWith(this))
-                    prompt += "!";
-
+                QString prompt = target->willBeFriendWith(this) ? "FormationSummon" : "FormationSummon!";
                 bool success = room->askForSkillInvoke(target, prompt);
                 LogMessage log;
                 log.type = "#SummonResult";
@@ -1833,10 +1832,7 @@ void ServerPlayer::summonFriends(const ArrayType type) {
                 continue;
             else {
                 if (!target->hasShownOneGeneral()) {
-                    QString prompt = "FormationSummon";
-                    if (!target->willBeFriendWith(this))
-                        prompt += "!";
-
+                    QString prompt = target->willBeFriendWith(this) ? "FormationSummon" : "FormationSummon!";
                     bool success = room->askForSkillInvoke(target, prompt);
                     LogMessage log;
                     log.type = "#SummonResult";
@@ -1911,7 +1907,8 @@ QStringList ServerPlayer::getBigKingdoms(const QString &reason, MaxCardsType::Ma
     return big_kingdoms;
 }
 
-void ServerPlayer::changeToLord() {
+void ServerPlayer::changeToLord()
+{
     foreach(QString skill_name, head_skills.keys()) {
         Player::loseSkill(skill_name);
         JsonArray arg_loseskill;
@@ -1968,7 +1965,21 @@ void ServerPlayer::changeToLord() {
             room->doNotify(this, S_COMMAND_SET_MARK, arg);
         }
     }
+}
 
+void ServerPlayer::slashSettlementFinished(const Card *slash)
+{
+    removeQinggangTag(slash);
+
+    QStringList blade_use = property("blade_use").toStringList();
+
+    if (blade_use.contains(slash->toString())) {
+        blade_use.removeOne(slash->toString());
+        room->setPlayerProperty(this, "blade_use", blade_use);
+
+        if (blade_use.isEmpty())
+            room->removePlayerDisableShow(this, "Blade");
+    }
 }
 
 #ifndef QT_NO_DEBUG

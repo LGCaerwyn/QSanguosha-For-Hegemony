@@ -22,6 +22,7 @@
 #include "standard-basics.h"
 #include "standard-tricks.h"
 #include "engine.h"
+#include "client.h"
 
 Blade::Blade(Card::Suit suit, int number)
     : Weapon(suit, number, 3)
@@ -103,7 +104,7 @@ const Card *HalberdCard::validate(CardUseStruct &card_use) const{
     Room *room = player->getRoom();
     room->setPlayerFlag(player, "HalberdUse");
     room->setPlayerFlag(player, "HalberdSlashFilter");
-    bool use = room->askForUseCard(player, "slash", "@halberd");
+    bool use = room->askForUseCard(player, "slash", "@Halberd");
     if (!use) {
         room->setPlayerFlag(player, "Global_HalberdFailed");
         room->setPlayerFlag(player, "-HalberdUse");
@@ -117,7 +118,7 @@ const Card *HalberdCard::validateInResponse(ServerPlayer *player) const{
     Room *room = player->getRoom();
     room->setPlayerFlag(player, "HalberdUse");
     room->setPlayerFlag(player, "HalberdSlashFilter");
-    bool use = room->askForUseCard(player, "slash", "@halberd");
+    bool use = room->askForUseCard(player, "slash", "@Halberd");
     if (!use) {
         room->setPlayerFlag(player, "Global_HalberdFailed");
         room->setPlayerFlag(player, "-HalberdUse");
@@ -131,23 +132,31 @@ void HalberdCard::onUse(Room *, const CardUseStruct &) const{
     // do nothing
 }
 
-class HalberdSkill: public ZeroCardViewAsSkill {
+class HalberdSkill: public ZeroCardViewAsSkill
+{
 public:
-    HalberdSkill(): ZeroCardViewAsSkill("Halberd") {
+    HalberdSkill(): ZeroCardViewAsSkill("Halberd")
+    {
     }
 
-    virtual bool isEnabledAtPlay(const Player *player) const{
+    virtual bool isEnabledAtPlay(const Player *player) const
+    {
         return !player->hasFlag("Global_HalberdFailed")
             && Slash::IsAvailable(player) && player->getMark("Equips_Nullified_to_Yourself") == 0;
     }
 
-    virtual bool isEnabledAtResponse(const Player *player, const QString &pattern) const{
-        return !player->hasFlag("Global_HalberdFailed") && !player->hasFlag("slashDisableExtraTarget")
-            && Sanguosha->currentRoomState()->getCurrentCardUseReason() == CardUseStruct::CARD_USE_REASON_RESPONSE_USE
-            && pattern == "slash" && player->getMark("Equips_Nullified_to_Yourself") == 0;
+    virtual bool isEnabledAtResponse(const Player *player, const QString &pattern) const
+    {
+        return !player->hasFlag("Global_HalberdFailed")
+                && !player->hasFlag("slashDisableExtraTarget")
+                && Sanguosha->currentRoomState()->getCurrentCardUseReason() == CardUseStruct::CARD_USE_REASON_RESPONSE_USE
+                && pattern == "slash"
+                && player->getMark("Equips_Nullified_to_Yourself") == 0
+                && !player->hasFlag("HalberdUse");
     }
 
-    virtual const Card *viewAs() const{
+    virtual const Card *viewAs() const
+    {
         return new HalberdCard;
     }
 };
@@ -206,11 +215,25 @@ Breastplate::Breastplate(Card::Suit suit, int number)
     transferable = true;
 }
 
+class BreastplateViewAsSkill: public ZeroCardViewAsSkill {
+public:
+    BreastplateViewAsSkill(): ZeroCardViewAsSkill("Breastplate"){
+    }
+
+    virtual const Card *viewAs() const{
+        TransferCard *card = new TransferCard;
+        card->addSubcard(Self->getArmor());
+        card->setSkillName("transfer");
+        return card;
+    }
+};
+
 class BreastplateSkill : public ArmorSkill {
 public:
     BreastplateSkill() : ArmorSkill("Breastplate") {
         events << DamageInflicted;
         frequency = Compulsory;
+        view_as_skill = new BreastplateViewAsSkill;
     }
 
     virtual QStringList triggerable(TriggerEvent, Room *, ServerPlayer *player, QVariant &data, ServerPlayer* &) const{
@@ -221,7 +244,7 @@ public:
     }
 
     virtual bool cost(TriggerEvent, Room *, ServerPlayer *player, QVariant &, ServerPlayer *) const{
-        return player->askForSkillInvoke(objectName());
+        return player->askForSkillInvoke(this);
     }
 
     virtual bool effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *) const{
@@ -275,20 +298,9 @@ public:
         log2.from = player;
         log2.arg = objectName();
         room->sendLog(log2);
-        LogMessage log;
-        if (use.from) {
-            log.type = "$CancelTarget";
-            log.from = use.from;
-        } else {
-            log.type = "$CancelTargetNoUser";
-        }
-        log.to << player;
-        log.arg = use.card->objectName();
-        room->sendLog(log);
 
-        room->setEmotion(player, "cancel");
+        room->cancelTarget(use, player); // Room::cancelTarget(use, player);
 
-        use.to.removeOne(player);
         data = QVariant::fromValue(use);
         return false;
     }
@@ -622,11 +634,15 @@ bool LureTiger::targetFilter(const QList<const Player *> &targets, const Player 
 }
 
 void LureTiger::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    QStringList nullified_list = room->getTag("CardUseNullifiedList").toStringList();
+    bool all_nullified = nullified_list.contains("_ALL_TARGETS");
     foreach(ServerPlayer *target, targets) {
         CardEffectStruct effect;
         effect.card = this;
         effect.from = source;
         effect.to = target;
+        effect.multiple = (targets.length() > 1);
+        effect.nullified = (all_nullified || nullified_list.contains(target->objectName()));
 
         room->cardEffect(effect);
     }
@@ -942,11 +958,15 @@ void AllianceFeast::onUse(Room *room, const CardUseStruct &card_use) const{
 }
 
 void AllianceFeast::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const{
+    QStringList nullified_list = room->getTag("CardUseNullifiedList").toStringList();
+    bool all_nullified = nullified_list.contains("_ALL_TARGETS");
     foreach(ServerPlayer *target, targets) {
         CardEffectStruct effect;
         effect.card = this;
         effect.from = source;
         effect.to = target;
+        effect.multiple = (targets.length() > 1);
+        effect.nullified = (all_nullified || nullified_list.contains(target->objectName()));
 
         if (target == source) {
             int n = 0;
@@ -1063,7 +1083,13 @@ public:
         return room->askForCard(ask_who, "..", "@threaten_emperor", data, objectName());
     }
 
-    virtual bool effect(TriggerEvent, Room *, ServerPlayer *, QVariant &, ServerPlayer *ask_who) const{
+    virtual bool effect(TriggerEvent, Room *room, ServerPlayer *, QVariant &, ServerPlayer *ask_who) const{
+
+        LogMessage l;
+        l.type = "#Fangquan";
+        l.to << ask_who;
+        room->sendLog(l);
+
         ask_who->gainAnExtraTurn();
         return false;
     }
@@ -1143,6 +1169,19 @@ void ImperialOrder::onEffect(const CardEffectStruct &effect) const{
     }
 }
 
+class JingFanSkill: public ZeroCardViewAsSkill {
+public:
+    JingFanSkill(): ZeroCardViewAsSkill("JingFan"){
+    }
+
+    virtual const Card *viewAs() const{
+        TransferCard *card = new TransferCard;
+        card->addSubcard(Self->getOffensiveHorse());
+        card->setSkillName("transfer");
+        return card;
+    }
+};
+
 StrategicAdvantagePackage::StrategicAdvantagePackage()
     : Package("strategic_advantage", Package::CardPack){
     QList<Card *> cards;
@@ -1221,6 +1260,7 @@ StrategicAdvantagePackage::StrategicAdvantagePackage()
            << new BladeSkill
            << new JadeSealSkill
            << new BreastplateSkill
+           << new JingFanSkill
            << new WoodenOxSkill << new WoodenOxTriggerSkill
            << new HalberdSkill << new HalberdTrigger << new HalberdTargetMod
            << new LureTigerSkill << new LureTigerProhibit
