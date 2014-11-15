@@ -217,7 +217,7 @@ function SmartAI:useCardBurningCamps(card, use)
 
 	local player = self.room:nextPlayer(self.player)
 	if self:isFriendWith(player) then return end
-	
+
 	local players = player:getFormation()
 	if players:isEmpty() then return end
 	local shouldUse
@@ -545,10 +545,10 @@ function SmartAI:useCardFightTogether(card, use)
 				if v_big > v_small and v_big > 0 then self.FightTogether_choice = "big"
 				elseif v_small > v_big and v_small > 0 then self.FightTogether_choice = "small"
 				elseif v_big == v_small and v_big > 0 then
-					if #bigs > #smalls then return "big"
-					elseif #bigs < #smalls then return "small"
+					if #bigs > #smalls then self.FightTogether_choice = "big"
+					elseif #bigs < #smalls then self.FightTogether_choice = "small"
 					else
-						return math.random(1, 2) == 1 and "big" or "small"
+						self.FightTogether_choice = math.random(1, 2) == 1 and "big" or "small"
 					end
 				end
 			end
@@ -687,20 +687,21 @@ sgs.ai_skill_cardask["@imperial_order-equip"] = function(self)
 	if self:needToThrowArmor() then
 		return self.player:getArmor():getEffectiveId()
 	end
-	if not self:willShowForAttack() then 
+	if not self:willShowForAttack() and self.player:getPhase() == sgs.Player_NotActive then
 		local cards = self.player:getCards("he")
 		local cards = sgs.QList2Table(self.player:getCards("he"))
 			for _, card in ipairs(cards) do
 				if (card:isKindOf("Weapon") and self.player:getHandcardNum() < 3) or card:isKindOf("OffensiveHorse")
 					or self:getSameEquip(card, self.player) then
-					return card:getEffectiveId() 
+					return card:getEffectiveId()
 				end
 			end
-	end		
+	end
 	return "."
 end
 
 sgs.ai_skill_choice.imperial_order = function(self)
+	if self.player:getPhase() ~= sgs.Player_NotActive then return "show" end
 	if self:needToLoseHp() then return "losehp" end
 	if not self.player:isWounded() and self.player:getCards("he"):length() > 6 then return "losehp" end
 	return "show"
@@ -830,6 +831,7 @@ function sgs.ai_weapon_value.Halberd(self, enemy, player)
 	return 2.1
 end
 
+--WoodenOx
 local wooden_ox_skill = {}
 wooden_ox_skill.name = "WoodenOx"
 table.insert(sgs.ai_skills, wooden_ox_skill)

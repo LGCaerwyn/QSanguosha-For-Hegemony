@@ -22,6 +22,7 @@ local qingnang_skill = {}
 qingnang_skill.name = "qingnang"
 table.insert(sgs.ai_skills, qingnang_skill)
 qingnang_skill.getTurnUseCard = function(self)
+	if not self:willShowForDefence() then return nil end 
 	if self.player:getHandcardNum() < 1 then return nil end
 	if self.player:usedTimes("QingnangCard") > 0 then return nil end
 
@@ -176,8 +177,8 @@ function SmartAI:findLijianTarget(card_name, use)
 		local friend_maxSlash
 		for _, friend in ipairs(self.friends_noself) do
 			if friend:isMale() and self:hasTrickEffective(duel, first, friend) then
-				if (getCardsNum("Slash", friend) > maxSlash) then
-					maxSlash = getCardsNum("Slash", friend)
+				if (getCardsNum("Slash", friend, self.player) > maxSlash) then
+					maxSlash = getCardsNum("Slash", friend, self.player)
 					friend_maxSlash = friend
 				end
 			end
@@ -187,7 +188,7 @@ function SmartAI:findLijianTarget(card_name, use)
 			local safe = false
 			if first:hasShownSkills("fankui|ganglie") then
 				if (first:getHp() <= 1 and first:getHandcardNum() == 0) then safe = true end
-			elseif (getCardsNum("Slash", friend_maxSlash) >= getCardsNum("Slash", first)) then safe = true end
+			elseif (getCardsNum("Slash", friend_maxSlash, self.player) >= getCardsNum("Slash", first, self.player)) then safe = true end
 			if safe then return friend_maxSlash end
 		end
 		return nil
@@ -235,7 +236,7 @@ function SmartAI:findLijianTarget(card_name, use)
 			if #others >= 1 and not others[1]:isLocked(duel) then
 				table.insert(males, others[1])
 			elseif xunyu and not xunyu:isLocked(duel) then
-				if getCardsNum("Slash", males[1]) < 1 then
+				if getCardsNum("Slash", males[1], self.player) < 1 then
 					table.insert(males, xunyu)
 				else
 					local drawcards = 0
@@ -468,7 +469,7 @@ luanwu_skill.getTurnUseCard = function(self)
 			end
 		end
 
-		if getCardsNum("Jink", player) == 0 then
+		if getCardsNum("Jink", player, self.player) == 0 then
 			local lost_value = 0
 			if player:hasShownSkills(sgs.masochism_skill) then lost_value = player:getHp() / 2 end
 			local hp = math.max(player:getHp(), 1)
@@ -587,6 +588,7 @@ sgs.ai_skill_invoke.mengjin = function(self, data)
 end
 
 sgs.ai_skill_cardask["@guidao-card"]=function(self, data)
+	if not (self:willShowForAttack() or self:willShowForDefence() ) then return "." end 
 	local judge = data:toJudge()
 	local all_cards = self.player:getCards("he")
 	for _, id in sgs.qlist(self.player:getPile("wooden_ox")) do
@@ -733,6 +735,7 @@ sgs.ai_suit_priority.guidao= "diamond|heart|club|spade"
 sgs.ai_skill_discard.beige = function(self)
 	local damage = self.player:getTag("beige_data"):toDamage()
 	if damage.to and not self:isFriend(damage.to) or damage.from and self:isFriend(damage.from) then return {} end
+	if not self:willShowForMasochism() then return {} end
 	return self:askForDiscard("dummy_reason", 1, 1, false, true)
 end
 
@@ -1042,9 +1045,7 @@ function huoshui_skill.getTurnUseCard(self)
 	return card
 end
 function sgs.ai_skill_use_func.HuoshuiCard(card, use, self)
-	if (math.random() < 0.15) then
-		use.card = card
-	end
+	use.card = card
 end
 
 sgs.ai_use_priority.HuoshuiCard = 10

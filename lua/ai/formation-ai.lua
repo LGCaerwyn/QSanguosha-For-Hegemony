@@ -18,8 +18,18 @@
   QSanguosha-Rara
 *********************************************************************]]
 
-sgs.ai_skill_invoke.tuntian = true
-sgs.ai_skill_invoke._tuntian = true
+sgs.ai_skill_invoke.tuntian = function(self, data)
+	if not (self:willShowForAttack() or self:willShowForDefence()) then
+		return false
+	end
+	return true
+end
+sgs.ai_skill_invoke._tuntian = function(self, data)
+	if not (self:willShowForAttack() or self:willShowForDefence()) then
+		return false
+	end
+	return true
+end
 
 local jixi_skill = {}
 jixi_skill.name = "jixi"
@@ -200,7 +210,7 @@ sgs.huyuan_keep_value = {
 
 function SmartAI:isTiaoxinTarget(enemy)
 	if not enemy then self.room:writeToConsole(debug.traceback()) return end
-	if getCardsNum("Slash", enemy) < 1 and self.player:getHp() > 1 and not self:canHit(self.player, enemy)
+	if getCardsNum("Slash", enemy, self.player) < 1 and self.player:getHp() > 1 and not self:canHit(self.player, enemy)
 		and not (enemy:hasWeapon("DoubleSword") and self.player:getGender() ~= enemy:getGender())
 		then return true end
 	if sgs.card_lack[enemy:objectName()]["Slash"] == 1
@@ -286,6 +296,7 @@ sgs.ai_skill_invoke.shoucheng = function(self, data)
 			return true
 		end
 	end
+	return false
 end
 
 local shangyi_skill = {}
@@ -381,7 +392,12 @@ sgs.ai_skill_discard.yicheng = function(self, discard_num, min_num, optional, in
 	return self:askForDiscard("dummyreason", 1, 1, false, true)
 end
 
-sgs.ai_skill_invoke.qianhuan = true
+sgs.ai_skill_invoke.qianhuan = function(self, data)
+	if not (self:willShowForAttack() or self:willShowForDefence() or self:willShowForMasochism() ) then
+		return false
+	end
+	return true
+end
 
 local invoke_qianhuan = function(self, use)
 	if (use.from and self:isFriend(use.from)) then return false end
@@ -396,7 +412,7 @@ local invoke_qianhuan = function(self, use)
 			or use.card:isKindOf("ArcheryAttack") or use.card:isKindOf("Drowning") or use.card:isKindOf("SavageAssault") then
 			return true
 		end
-		if use.card:isKindOf("KnownBoth") or use.card:isKindOf("Dismantlement") or use.card:isKindOf("Indulgence") then
+		if use.card:isKindOf("KnownBoth") or use.card:isKindOf("Dismantlement") or use.card:isKindOf("Indulgence") or use.card:isKindOf("SupplyShortage") then
 			--@todo
 			return false
 		end

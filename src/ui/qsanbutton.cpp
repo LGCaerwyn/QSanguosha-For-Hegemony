@@ -36,11 +36,7 @@ QSanButton::QSanButton(QGraphicsItem *parent)
     _m_mouseEntered(false), multi_state(false), first_state(true)
 {
     setSize(QSize(0, 0));
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-    setAcceptsHoverEvents(true);
-#else
     setAcceptHoverEvents(true);
-#endif
     setAcceptedMouseButtons(Qt::LeftButton);
 }
 
@@ -56,11 +52,7 @@ QSanButton::QSanButton(const QString &groupName, const QString &buttonName, QGra
     }
     setSize(_m_bgPixmap[0].size());
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-    setAcceptsHoverEvents(true);
-#else
     setAcceptHoverEvents(true);
-#endif
     setAcceptedMouseButtons(Qt::LeftButton);
 }
 
@@ -230,7 +222,7 @@ QSanSkillButton::QSanSkillButton(QGraphicsItem *parent)
     _m_emitDeactivateSignal = false;
     _m_skill = NULL;
     _m_viewAsSkill = NULL;
-    connect(this, SIGNAL(clicked()), this, SLOT(onMouseClick()));
+    connect(this, &QSanSkillButton::clicked, this, &QSanSkillButton::onMouseClick);
     _m_skill = NULL;
 }
 
@@ -383,8 +375,8 @@ QSanSkillButton *QSanInvokeSkillDock::addSkillButtonByName(const QString &skillN
 
     const Skill *skill = Sanguosha->getSkill(skillName);
     button->setSkill(skill);
-    connect(button, SIGNAL(skill_activated(const Skill *)), this, SIGNAL(skill_activated(const Skill *)));
-    connect(button, SIGNAL(skill_deactivated(const Skill *)), this, SIGNAL(skill_deactivated(const Skill *)));
+    connect(button, (void (QSanInvokeSkillButton::*)(const Skill *))(&QSanInvokeSkillButton::skill_activated), this, &QSanInvokeSkillDock::skill_activated);
+    connect(button, (void (QSanInvokeSkillButton::*)(const Skill *))(&QSanInvokeSkillButton::skill_deactivated), this, &QSanInvokeSkillDock::skill_deactivated);
     _m_buttons.append(button);
     update();
     return button;

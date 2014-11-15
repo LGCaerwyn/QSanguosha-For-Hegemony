@@ -19,11 +19,13 @@
 *********************************************************************]]
 
 sgs.ai_skill_invoke.jianxiong = function(self, data)
+	if not self:willShowForMasochism() then return false end 
 	if self.jianxiong then self.jianxiong = nil return true end
 	return not self:needKongcheng(self.player, true)
 end
 
 sgs.ai_skill_invoke.fankui = function(self, data)
+	if not self:willShowForMasochism() then return false end 
 	local target = data:toDamage().from
 	if not target then return end
 	if sgs.ai_need_damaged.fankui(self, target, self.player) then return true end
@@ -137,8 +139,8 @@ end
 
 
 sgs.ai_skill_cardask["@guicai-card"] = function(self, data)
+	if not (self:willShowForAttack() or self:willShowForDefence() ) then return "." end 
 	local judge = data:toJudge()
-
 	local cards = sgs.QList2Table(self.player:getHandcards())
 	for _, id in sgs.qlist(self.player:getPile("wooden_ox")) do
 		table.insert(cards, 1, sgs.Sanguosha:getCard(id))
@@ -193,6 +195,7 @@ sgs.guicai_suit_value = {
 
 
 sgs.ai_skill_invoke.ganglie = function(self, data)
+	if not self:willShowForMasochism() then return false end 
 	local mode = self.room:getMode()
 	local damage = data:toDamage()
 	if not damage.from then
@@ -280,9 +283,8 @@ function SmartAI:findTuxiTarget()
 		if zhugeliang:getHp() <= 2 then
 			if add_player(zhugeliang, 1) == 2 then return targets end
 		else
-			local flag = string.format("%s_%s_%s","visible",self.player:objectName(),zhugeliang:objectName())
 			local cards = sgs.QList2Table(zhugeliang:getHandcards())
-			if #cards == 1 and (cards[1]:hasFlag("visible") or cards[1]:hasFlag(flag)) then
+			if #cards == 1 and sgs.cardIsVisible(cards[1], zhugeliang, self.player) then
 				if cards[1]:isKindOf("TrickCard") or cards[1]:isKindOf("Slash") or cards[1]:isKindOf("EquipCard") then
 					if add_player(zhugeliang, 1) == 2 then return targets end
 				end
@@ -292,9 +294,8 @@ function SmartAI:findTuxiTarget()
 
 	for _, enemy in ipairs(self.enemies) do
 		local cards = sgs.QList2Table(enemy:getHandcards())
-		local flag = string.format("%s_%s_%s", "visible", self.player:objectName(), enemy:objectName())
 		for _, card in ipairs(cards) do
-			if (card:hasFlag("visible") or card:hasFlag(flag)) and (card:isKindOf("Peach") or card:isKindOf("Nullification") or card:isKindOf("Analeptic") ) then
+			if sgs.cardIsVisible(card, enemy, self.player) and (card:isKindOf("Peach") or card:isKindOf("Nullification") or card:isKindOf("Analeptic") ) then
 				if add_player(enemy) == 2  then return targets end
 			end
 		end
@@ -361,7 +362,7 @@ sgs.ai_skill_invoke.luoyi = function(self,data)
 		end
 		if card:isKindOf("Duel") then
 			for _, enemy in ipairs(self.enemies) do
-				if self:getCardsNum("Slash") >= getCardsNum("Slash", enemy) and sgs.isGoodTarget(enemy, self.enemies, self)
+				if self:getCardsNum("Slash") >= getCardsNum("Slash", enemy, self.player) and sgs.isGoodTarget(enemy, self.enemies, self)
 				and not enemy:hasArmorEffect("SilverLion")
 				and self:objectiveLevel(enemy) > 3 and self:damageIsEffective(enemy) then
 					dueltarget = dueltarget + 1
@@ -384,8 +385,7 @@ function sgs.ai_cardneed.luoyi(to, card, self)
 	local cards = to:getHandcards()
 	local need_slash = true
 	for _, c in sgs.qlist(cards) do
-		local flag = string.format("%s_%s_%s","visible",self.room:getCurrent():objectName(),to:objectName())
-		if c:hasFlag("visible") or c:hasFlag(flag) then
+		if sgs.cardIsVisible(c, to, self.player) then
 			if isCard("Slash", c, to) then
 				need_slash = false
 				break
@@ -442,6 +442,7 @@ function sgs.ai_slash_prohibit.tiandu(self, from, to)
 end
 
 sgs.ai_skill_invoke.yiji = function(self)
+	if not self:willShowForMasochism() then return false end 
 	if self.player:getHandcardNum() < 2 then return true end
 	for _, friend in ipairs(self.friends) do
 		if not self:needKongcheng(friend, true) then return true end
@@ -665,7 +666,7 @@ local function card_for_qiaobian(self, who, return_prompt)
 			for _, judge in sgs.qlist(judges) do
 				card = sgs.Sanguosha:getCard(judge:getEffectiveId())
 				for _, enemy in ipairs(self.enemies) do
-					if not enemy:containsTrick(judge:objectName()) --[[and not sgs.Sanguosha:isProhibited(self.player, enemy, judge)]] then
+					if not enemy:containsTrick(judge:objectName()) and self:hasTrickEffective(judge, enemy, self.player) then
 						target = enemy
 						break
 					end
@@ -1142,6 +1143,7 @@ sgs.ai_card_intention.QuhuCard = 0
 sgs.dynamic_value.control_card.QuhuCard = true
 
 sgs.ai_skill_playerchosen.jieming = function(self, targets)
+	if not self:willShowForMasochism() then return end 
 	local friends = {}
 	local selected_target = self.player:getTag("jieming_target"):toStringList()
 
@@ -1206,6 +1208,7 @@ function SmartAI:toTurnOver(player, n, reason) -- @todo: param of toTurnOver
 end
 
 sgs.ai_skill_playerchosen.fangzhu = function(self, targets)
+	if not self:willShowForMasochism() then return end 
 	self:sort(self.friends_noself, "handcard")
 	local target = nil
 	local n = self.player:getLostHp()
@@ -1230,14 +1233,6 @@ sgs.ai_skill_playerchosen.fangzhu = function(self, targets)
 			if not target then
 				for _, enemy in ipairs(self.enemies) do
 					if self:toTurnOver(enemy, n, "fangzhu") then
-						target = enemy
-						break
-					end
-				end
-			end
-			if not target then
-				for _, enemy in ipairs(self.enemies) do
-					if enemy:getPhase() == sgs.Player_NotActive then
 						target = enemy
 						break
 					end
@@ -1277,6 +1272,7 @@ sgs.ai_need_damaged.fangzhu = function (self, attacker, player)
 end
 
 sgs.ai_skill_cardask["@xiaoguo"] = function(self, data)
+	if not self:willShowForAttack() then return "." end 
 	local currentplayer = self.room:getCurrent()
 
 	if self.player:getMark("Global_TurnCount") < 2 and not self.player:hasShownOneGeneral() and self:getOverflow(self.player, false) < 1 then
@@ -1385,11 +1381,4 @@ end
 
 sgs.ai_cardneed.xiaoguo = function(to, card)
 	return getKnownCard(to, global_room:getCurrent(), "BasicCard", true) == 0 and card:getTypeId() == sgs.Card_TypeBasic
-end
-
-sgs.ai_skill_invoke.tuntian = function(self, data)
-	if not (self:willShowForAttack() or self:willShowForDefence()) then
-		return false
-	end
-	return true
 end
