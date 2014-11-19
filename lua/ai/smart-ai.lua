@@ -1732,9 +1732,12 @@ function SmartAI:filterEvent(event, player, data)
 				local index = 2
 				if promptlist[1] == "cardResponded" then
 
-					if promptlist[2]:match("jink") then sgs.card_lack[player:objectName()]["Jink"] = promptlist[#promptlist] == "_nil_" and 1 or 0
-					elseif promptlist[2]:match("slash") then sgs.card_lack[player:objectName()]["Slash"] = promptlist[#promptlist] == "_nil_" and 1 or 0
-					elseif promptlist[2]:match("peach") then sgs.card_lack[player:objectName()]["Peach"] = promptlist[#promptlist] == "_nil_" and 1 or 0
+					if promptlist[2]:match("jink") and not self:hasEightDiagramEffect(player) then
+						sgs.card_lack[player:objectName()]["Jink"] = promptlist[#promptlist] == "_nil_" and 1 or 0
+					elseif promptlist[2]:match("slash") then
+						sgs.card_lack[player:objectName()]["Slash"] = promptlist[#promptlist] == "_nil_" and 1 or 0
+					elseif promptlist[2]:match("peach") then
+						sgs.card_lack[player:objectName()]["Peach"] = promptlist[#promptlist] == "_nil_" and 1 or 0
 					end
 
 					index = 3
@@ -2079,12 +2082,12 @@ function SmartAI:askForNullification(trick, from, to, positive)
 	local callback = sgs.ai_nullification[trick:getClassName()]
 	if type(callback) == "function" then
 		local shouldUse = callback(self, trick, from, to, positive)
-		if shouldUse then return null_card end
+		return shouldUse and null_card
 	end
 
 	if positive then
 
-		if from and (trick:isKindOf("FireAttack") or trick:isKindOf("Duel") or trick:isKindOf("AOE")) and self:cantbeHurt(to, from) then
+		if from and (trick:isKindOf("FireAttack") or trick:isKindOf("Duel") or trick:isKindOf("ArcheryAttack") or trick:isKindOf("SavageAssault")) and self:cantbeHurt(to, from) then
 			if self:isFriend(from) then return null_card end
 			return
 		end
@@ -2281,8 +2284,6 @@ function SmartAI:askForNullification(trick, from, to, positive)
 	end
 	return
 end
-
-sgs.ai_skill_choice.heg_nullification = "all"
 
 function SmartAI:getCardRandomly(who, flags)
 	local cards = who:getCards(flags)
@@ -4519,7 +4520,7 @@ function SmartAI:needToLoseHp(to, from, isSlash, passive, recover)
 	end
 	if recover then return to:getHp() >= n end
 
-	if self.player:hasSkills("hengzheng|yinghun|zaiqi") and not self.player:isWounded() then return true end
+	if self.player:hasSkills("hengzheng|yinghun|zaiqi") then n = 3 end
 
 	return to:getHp() > n
 end
@@ -5116,7 +5117,7 @@ function SmartAI:willShowForAttack()
 		end
 	end
 
-	local showRate = math.random() + f/20 + eAtt/20 + shown/30
+	local showRate = math.random() + f/20 + eAtt/10 + shown/20
 
 	local firstShowReward = false
 	if sgs.GetConfig("RewardTheFirstShowingPlayer", true) then
@@ -5126,7 +5127,7 @@ function SmartAI:willShowForAttack()
 	end
 	if firstShowReward and showRate > 0.9 then return true end
 
-	if showRate < 0.9 then return false end
+	if showRate < 0.8 then return false end
 	if e < f or eAtt <= 0 then return false end
 
 return true
@@ -5152,7 +5153,7 @@ function SmartAI:willShowForDefence()
 			end
 		end
 	end
-	local showRate = math.random() - e/10 - self.player:getHp()/10 + shown/30
+	local showRate = math.random() - e/10 - self.player:getHp()/10 + shown/20
 
 	local firstShowReward = false
 	if sgs.GetConfig("RewardTheFirstShowingPlayer", true) then
@@ -5162,7 +5163,7 @@ function SmartAI:willShowForDefence()
 	end
 	if firstShowReward and showRate > 0.9 then return true end
 
-	if showRate < 0.9 then return false end
+	if showRate < 0.8 then return false end
 	if f < 2 or not self:isWeak() then return false end
 
 	return true
@@ -5188,8 +5189,8 @@ function SmartAI:willShowForMasochism()
 			end
 		end
 	end
-	local showRate = math.random() - self.player:getHp()/20 + e/20 + shown/30
-
+	local showRate = math.random() - self.player:getHp()/10 + e/10 + shown/20
+	
 	local firstShowReward = false
 	if sgs.GetConfig("RewardTheFirstShowingPlayer", true) then
 		if shown == 0 then
@@ -5197,10 +5198,10 @@ function SmartAI:willShowForMasochism()
 		end
 	end
 	if firstShowReward and showRate > 0.9 then return true end
-
+	
 	if showRate < 0.2 then return false end
-	if self.player:getLostHp() == 0 and self:getCardsNum("Peach") > 0 and showRate < 0.3 then return false end
-
+	if self.player:getLostHp() == 0 and self:getCardsNum("Peach") > 0 and showRate < 0.2 then return false end
+	
 	return true
 end
 
