@@ -2061,6 +2061,9 @@ function SmartAI:askForNullification(trick, from, to, positive)
 	if self.player:isLocked(null_card) then return nil end
 	if (from and from:isDead()) or (to and to:isDead()) then return nil end
 
+	local jgyueying = sgs.findPlayerByShownSkillName("jgjingmiao")
+	if jgyueying and self:isEnemy(jgyueying) and self.player:getHp() == 1 then return nil end
+
 	if trick:isKindOf("FireAttack") then
 		if to:isKongcheng() or from:isKongcheng() then return nil end
 		if self.player:objectName() == from:objectName() and self.player:getHandcardNum() == 1 and self.player:handCards():first() == null_card:getId() then return nil end
@@ -2155,6 +2158,7 @@ function SmartAI:askForNullification(trick, from, to, positive)
 				if to:getHp() - to:getHandcardNum() >= 2 then return nil end
 				if to:hasShownSkill("tuxi") and to:getHp() > 2 then return nil end
 				if to:hasShownSkill("qiaobian") and not to:isKongcheng() then return nil end
+				if to:containsTrick("supply_shortage") and null_num == 1 and to:getOverflow() > 1 then return nil end
 				return null_card
 			end
 		elseif trick:isKindOf("SupplyShortage") then
@@ -2163,6 +2167,7 @@ function SmartAI:askForNullification(trick, from, to, positive)
 					and (global_room:alivePlayerCount() > 4 or to:hasShownSkill("yizhi")) then return end
 				if to:hasShownSkills("guidao|tiandu") then return nil end
 				if to:hasShownSkill("qiaobian") and not to:isKongcheng() then return nil end
+				if to:containsTrick("indulgence") and null_num == 1 and to:getOverflow() < -1 then return nil end
 				return null_card
 			end
 
@@ -2398,6 +2403,10 @@ function SmartAI:askForCardChosen(who, flags, reason, method)
 				and not who:isKongcheng() and who:getHandcardNum() <= 2 and not self:doNotDiscard(who, "h", false, 1, reason) then
 				return self:getCardRandomly(who, "h")
 			end
+			if who:getHp() == 1 and not who:needKongcheng()
+				and not who:isKongcheng() and who:getHandcardNum() <= 2 and not self:doNotDiscard(who, "h", false, 1, reason) then
+				return self:getCardRandomly(who, "h")
+			end
 			local cards = sgs.QList2Table(who:getHandcards())
 			if #cards <= 2 and not self:doNotDiscard(who, "h", false, 1, reason) then
 				for _, cc in ipairs(cards) do
@@ -2625,6 +2634,7 @@ function SmartAI:needKongcheng(player, keep)
 	player = player or self.player
 	if keep then return player:isKongcheng() and player:hasShownSkill("kongcheng") end
 	if not self:hasLoseHandcardEffective(player) and not player:isKongcheng() then return true end
+	if player:hasShownSkill("hengzheng") and sgs.ai_skill_invoke.hengzheng(sgs.ais[player:objectName()]) and not player:getHp() == 1 then return true end
 	return player:hasShownSkills(sgs.need_kongcheng)
 end
 
@@ -3288,6 +3298,19 @@ function SmartAI:getRetrialCardId(cards, judge, self_card)
 	end
 	if not hasSpade and #other_suit > 0 then table.insertTable(can_use, other_suit) end
 
+	if reason ~= "lightning" then
+		for _, aplayer in sgs.qlist(self.room:getAllPlayers()) do
+			if aplayer:containsTrick("lightning") then
+				for _, card in ipairs(can_use) do
+					if card:getSuit() == sgs.Card_Spade and card:getNumber() >= 2 and card:getNumber() <= 9 then
+						table.removeOne(can_use, card)
+						break
+					end
+				end
+			end
+		end
+	end
+
 	if next(can_use) then
 		if self:needToThrowArmor() then
 			for _, c in ipairs(can_use) do
@@ -3327,6 +3350,7 @@ function SmartAI:damageIsEffective_(damageStruct)
 	if to:hasArmorEffect("PeaceSpell") and nature ~= sgs.DamageStruct_Normal then return false end
 	if to:hasShownSkills("jgyuhuo_pangtong|jgyuhuo_zhuque") and nature == sgs.DamageStruct_Fire then return false end
 	if to:getMark("@fog") > 0 and nature ~= sgs.DamageStruct_Thunder then return false end
+	if to:hasArmorEffect("Breastplate") and damage >= to:getHp() then return false end
 
 	for _, callback in pairs(sgs.ai_damage_effect) do
 		if type(callback) == "function" then
@@ -4502,8 +4526,14 @@ function SmartAI:needToLoseHp(to, from, isSlash, passive, recover)
 	if from and self:hasHeavySlashDamage(from, nil, to) then return false end
 	local n = to:getMaxHp()
 
-	if not passive and to:getMaxHp() > 2 and to:hasShownSkill("rende") and not self:willSkipPlayPhase(to) and self:findFriendsByType(sgs.Friend_Draw, to) then
-		n = math.min(n, to:getMaxHp() - 1)
+	if not passive then
+		if to:hasShownSkill("rende") and to:getMaxHp() > 2 and not self:willSkipPlayPhase(to) and self:findFriendsByType(sgs.Friend_Draw, to) then
+			n = math.min(n, to:getMaxHp() - 1)
+		elseif to:hasShownSkill("hengzheng") and sgs.ai_skill_invoke.hengzheng(sgs.ais[to:objectName()]) then
+			n = math.min(n, to:getMaxHp() - 1)
+		elseif to:hasShownSkills("yinghun|zaiqi") then
+			n = math.min(n, to:getMaxHp() - 1)
+		end
 	end
 
 	local xiangxiang = sgs.findPlayerByShownSkillName("jieyin")
@@ -4518,9 +4548,8 @@ function SmartAI:needToLoseHp(to, from, isSlash, passive, recover)
 		end
 		if need_jieyin then n = math.min(n, to:getMaxHp() - 1) end
 	end
-	if recover then return to:getHp() >= n end
 
-	if self.player:hasSkills("hengzheng|yinghun|zaiqi") then n = 3 end
+	if recover then return to:getHp() >= n end
 
 	return to:getHp() > n
 end
@@ -5000,11 +5029,7 @@ function SmartAI:cantbeHurt(player, from, damageNum)
 	end
 	if player:hasShownSkill("hengzheng") and player:getHandcardNum() ~= 0 and player:getHp() - damageNum == 1
 		and from:getNextAlive():objectName() == player:objectName() then
-		local hengzheng = 0
-		for _, player in sgs.qlist(self.room:getOtherPlayers(from)) do
-			if self:isEnemy(player, from) and player:getCardCount(true) > 0 then hengzheng = hengzheng + 1 end
-		end
-		if hengzheng > 2 then return true end
+		if sgs.ai_skill_invoke.hengzheng(sgs.ais[player:objectName()]) then return true end
 	end
 	return false
 end
@@ -5190,7 +5215,7 @@ function SmartAI:willShowForMasochism()
 		end
 	end
 	local showRate = math.random() - self.player:getHp()/10 + e/10 + shown/20
-	
+
 	local firstShowReward = false
 	if sgs.GetConfig("RewardTheFirstShowingPlayer", true) then
 		if shown == 0 then
@@ -5198,10 +5223,10 @@ function SmartAI:willShowForMasochism()
 		end
 	end
 	if firstShowReward and showRate > 0.9 then return true end
-	
+
 	if showRate < 0.2 then return false end
 	if self.player:getLostHp() == 0 and self:getCardsNum("Peach") > 0 and showRate < 0.2 then return false end
-	
+
 	return true
 end
 
