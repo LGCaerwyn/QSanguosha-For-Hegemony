@@ -30,7 +30,7 @@ math.randomseed(os.time())
 -- SmartAI is the base class for all other specialized AI classes
 SmartAI = (require "middleclass").class("SmartAI")
 
-version = "QSanguosha AI 20141024 (V0.262 Alpha)"
+version = "QSanguosha AI 20141201 19:31(UTC+8)"
 
 --- this function is only function that exposed to the host program
 --- and it clones an AI instance by general name
@@ -176,7 +176,7 @@ function setInitialTables()
 	for _, p in sgs.qlist(global_room:getAlivePlayers()) do
 		if p:getState() == "robot" then table.insert(sgs.robot, p) end
 		local kingdom = p:getKingdom()
-		if not table.contains(sgs.KingdomsTable, kingdom) and kingdom ~= "default" then
+		if not table.contains(sgs.KingdomsTable, kingdom) then
 			table.insert(sgs.KingdomsTable, kingdom)
 		end
 		sgs.ai_loyalty[kingdom] = {}
@@ -356,7 +356,12 @@ function SmartAI:activate(use)
 				self.toUse = nil
 				return
 			end
-			if use.card then self:speak(use.card:getClassName(), use) end
+			if use.card and use.card:isKindOf("Slash") and (not use.to or use.to:isEmpty()) then
+				self.toUse = nil
+				return
+			end
+
+			if use.card then self:speak(use.card:getClassName(), self.player:isFemale()) end
 		end
 	end
 	self.toUse = nil
@@ -379,7 +384,7 @@ function SmartAI:objectiveLevel(player)
 		end
 	end
 
-	local upperlimit = player:getLord() and 99 or math.floor(self.room:getPlayers():length() / 2)
+	local upperlimit = self.player:getLord() and 99 or math.floor(self.room:getPlayers():length() / 2)
 	if (not sgs.isAnjiang(self.player) or sgs.shown_kingdom[self_kingdom] < upperlimit) and self.role ~= "careerist" and self_kingdom == player_kingdom_explicit then return -2 end
 	if self:getKingdomCount() <= 2 then return 5 end
 
@@ -402,9 +407,6 @@ function SmartAI:objectiveLevel(player)
 		else return self:getOverflow() > 0 and 4 or 0
 		end
 	elseif string.find(gameProcess, ">") then
-		local isWeakPlayer = player:getHp() == 1 and not player:hasShownSkill("duanchang")
-						and (player:isKongcheng() or sgs.card_lack[player:objectName()] == 1 and player:getHandcardNum() <= 1)
-						and (sgs.getReward(player) >= 2 or self.player:aliveCount() <= 4) and self:isWeak(player)
 		local kingdom = gameProcess:split(">")[1]
 		if string.find(gameProcess, ">>>") then
 			if self_kingdom == kingdom and not selfIsCareerist then
@@ -416,7 +418,6 @@ function SmartAI:objectiveLevel(player)
 			else
 				if player_kingdom_explicit == kingdom then return 5
 				elseif player_kingdom_evaluate == kingdom then return 5
-				elseif isWeakPlayer then return 5
 				elseif player_kingdom_evaluate == "unknown" then return 0
 				elseif not string.find(player_kingdom_evaluate, kingdom) then return -1
 				else return 3
@@ -432,7 +433,7 @@ function SmartAI:objectiveLevel(player)
 				end
 				return 5
 			else
-				if player_kingdom_explicit == kingdom or player_kingdom_evaluate == kingdom or isWeakPlayer then return 5
+				if player_kingdom_explicit == kingdom or player_kingdom_evaluate == kingdom then return 5
 				elseif not string.find(player_kingdom_evaluate, kingdom) then return 0
 				else return 3
 				end
@@ -447,6 +448,9 @@ function SmartAI:objectiveLevel(player)
 				end
 				return 5
 			else
+				local isWeakPlayer = player:getHp() == 1 and not player:hasShownSkill("duanchang") and self:isWeak(player)
+										and (player:isKongcheng() or sgs.card_lack[player:objectName()] == 1 and player:getHandcardNum() <= 1)
+										and (sgs.getReward(player) >= 2 or self.player:aliveCount() <= 4)
 				if player_kingdom_explicit == kingdom or isWeakPlayer then return 5
 				elseif player_kingdom_evaluate == kingdom then return 3
 				elseif player_kingdom_explicit == "careerist" then return 0
@@ -516,13 +520,19 @@ function SmartAI:evaluateKingdom(player, other)
 	if self.room:getMode() == "jiange_defense" then return player:getKingdom() end
 	if sgs.ai_explicit[player:objectName()] ~= "unknown" then return sgs.ai_explicit[player:objectName()] end
 	if player:getMark(string.format("KnownBoth_%s_%s", other:objectName(), player:objectName())) > 0 then
-		local upperlimit = player:getLord() and 99 or self.room:getPlayers():length() / 2
+		local upperlimit = player:getLord() and 99 or math.floor( self.room:getPlayers():length() / 2)
 		return sgs.shown_kingdom[player:getKingdom()] < upperlimit and player:getKingdom() or "careerist"
+	end
+
+	if player:getMark("KnownBothFriend" .. other:objectName()) > 0 then
+		local upperlimit = self.player:getLord() and 99 or math.floor(self.room:getPlayers():length() / 2)
+		return sgs.shown_kingdom[player:getKingdom()] < upperlimit and other:getKingdom() or "careerist"
 	end
 
 	local max_value, max_kingdom = 0, {}
 	local KnownBothEnemy = player:getMark("KnownBothEnemy" .. other:objectName()) > 0
 	for kingdom, v in pairs(sgs.ai_loyalty) do
+		if not table.contains(sgs.KingdomsTable, kingdom) then continue end
 		if KnownBothEnemy and kingdom == other:getKingdom() then continue end
 		if sgs.ai_loyalty[kingdom][player:objectName()] > max_value then
 			max_value = sgs.ai_loyalty[kingdom][player:objectName()]
@@ -530,6 +540,7 @@ function SmartAI:evaluateKingdom(player, other)
 	end
 	if max_value > 0 then
 		for kingdom, v in pairs(sgs.ai_loyalty) do
+			if not table.contains(sgs.KingdomsTable, kingdom) then continue end
 			if sgs.ai_loyalty[kingdom][player:objectName()] == max_value then
 				table.insert(max_kingdom, kingdom)
 			end
@@ -577,9 +588,14 @@ function sgs.updateIntention(from, to, intention)
 			end
 		elseif to:getMark(string.format("KnownBoth_%s_%s", from:objectName(), to:objectName())) > 0 and sgs.isAnjiang(to) then
 			if sgs.isAnjiang(from) then
-				from:setMark("KnownBothEnemy" .. to:objectName(), 1)
-				to:setMark("KnownBothEnemy" .. from:objectName(), 1)
-			else
+				if intention > 0 then
+					from:setMark("KnownBothEnemy" .. to:objectName(), 1)
+					to:setMark("KnownBothEnemy" .. from:objectName(), 1)
+				elseif intention < 0 then
+					from:setMark("KnownBothFriend" .. to:objectName(), 1)
+					to:setMark("KnownBothFriend" .. from:objectName(), 1)
+				end
+			--[[else
 				sendLog = true
 				output_to = true
 				sgs.outputKingdomValues(to, intention)
@@ -589,7 +605,7 @@ function sgs.updateIntention(from, to, intention)
 					else
 						sgs.ai_loyalty[kingdom][to:objectName()] = sgs.ai_loyalty[kingdom][to:objectName()] - intention
 					end
-				end
+				end]]
 			end
 		end
 	end
@@ -602,19 +618,26 @@ function sgs.updateIntention(from, to, intention)
 end
 
 function sgs.outputKingdomValues(player, level, sendLog)
-	--[[local name = player:getGeneralName() .. "/" .. player:getGeneral2Name()
-	if name == "anjiang/anjiang" then name = "SEAT" .. player:getSeat() end
-	local msg = name .. " " .. level .. " "
-	for _, kingdom in ipairs(sgs.KingdomsTable) do
-		msg = msg .. " " .. kingdom .. math.ceil(sgs.ai_loyalty[kingdom][player:objectName()])
+	local logType = 1
+	local name = player:getGeneralName() .. "/" .. player:getGeneral2Name()
+	if name == "anjiang/anjiang" then
+		name = "SEAT" .. player:getSeat()
+		logType = 2
 	end
-	msg = msg .. " gP " .. sgs.gameProcess() .. " "
+	local msg = name
+	if logType == 2 then
+		msg = msg .. " " .. level
+		for _, kingdom in ipairs(sgs.KingdomsTable) do
+			msg = msg .. " " .. kingdom .. math.ceil(sgs.ai_loyalty[kingdom][player:objectName()])
+		end
+	end
+	msg = msg .. " gP:" .. sgs.gameProcess() .. " "
 	for _, kingdom in ipairs(sgs.KingdomsTable) do
-		msg = msg .. sgs.current_mode_players[kingdom]
+		msg = msg .. string.upper(string.sub(kingdom, 1, 1)) .. string.sub(kingdom, 2) .. sgs.current_mode_players[kingdom] .. " "
 	end
 	global_room:writeToConsole(msg)
 
-	if sendLog then
+	--[[if sendLog then
 		local log = sgs.LogMessage()
 		log.type = "#AI_evaluateKingdom"
 		log.arg = sgs.recorder:evaluateKingdom(player)
@@ -665,9 +688,25 @@ function SmartAI:updatePlayerKingdom(player, data)
 		sgs.general_shown[player:objectName()]["head"] = player:hasShownGeneral1()
 		sgs.general_shown[player:objectName()]["deputy"] = player:hasShownGeneral2()
 	end
+
 	for _, k in ipairs(sgs.KingdomsTable) do
 		if k == sgs.ai_explicit[player:objectName()] then sgs.ai_loyalty[k][player:objectName()] = 99
 		else sgs.ai_loyalty[k][player:objectName()] = 0
+		end
+	end
+	local all_shown = true
+	for _, p in sgs.qlist(self.room:getAlivePlayers()) do
+		if sgs.isAnjiang(p) then all_shown = false break end
+	end
+
+	if all_shown then
+		sgs.KingdomsTable = {}
+		for _, p in sgs.qlist(self.room:getAlivePlayers()) do
+			if p:getRole() == "careerist" then continue end
+			local kingdom = p:getKingdom()
+			if not table.contains(sgs.KingdomsTable, kingdom) then
+				table.insert(sgs.KingdomsTable, kingdom)
+			end
 		end
 	end
 
@@ -1078,6 +1117,8 @@ function SmartAI:getUseValue(card)
 		v = v + 1
 	end
 
+	if card:isKindOf("HalberdCard") then v = v + 20 end
+
 	if self.player:getPhase() == sgs.Player_Play then v = self:adjustUsePriority(card, v) end
 	return v
 end
@@ -1091,7 +1132,9 @@ function SmartAI:getUsePriority(card)
 		elseif card:isKindOf("Weapon") and not self.player:getWeapon() then v = (sgs.ai_use_priority[class_name] or 0) + 3
 		elseif card:isKindOf("DefensiveHorse") and not self.player:getDefensiveHorse() then v = 5.8
 		elseif card:isKindOf("OffensiveHorse") and not self.player:getOffensiveHorse() then v = 5.5
-		elseif card:isKindOf("Treasure") and not self.player:getTreasure() then v = 5.6
+		elseif card:isKindOf("Treasure") and not self.player:getTreasure() then
+			v = 5.6
+			if card:isKindOf("JadeSeal") then v = v + 0.1 end
 		end
 		return v
 	end
@@ -1398,12 +1441,13 @@ end
 function SmartAI:isFriend(other, another)
 	if not other then self.room:writeToConsole(debug.traceback()) return end
 	if another then
-		if sgs.gameProcess() == "===" and (sgs.isAnjiang(other) or sgs.isAnjiang(another))
-			and other:getMark("KnownBothEnemy" .. another:objectName()) > 0 then
-			return false
+		if other:isFriendWith(another) then return true end
+		if sgs.ais[other:objectName()] then
+			for _, p in ipairs(sgs.ais[other:objectName()].friends) do
+				if p:objectName() == another:objectName() then return true end
+			end
 		end
-		local of, af = self:isFriend(other), self:isFriend(another)
-		return of ~= nil and af ~= nil and of == af
+		return false
 	end
 	if self.player:objectName() == other:objectName() then return true end
 	if self.player:isFriendWith(other) then return true end
@@ -1416,12 +1460,12 @@ end
 function SmartAI:isEnemy(other, another)
 	if not other then self.room:writeToConsole(debug.traceback()) return end
 	if another then
-		if sgs.gameProcess() == "===" and (sgs.isAnjiang(other) or sgs.isAnjiang(another))
-			and other:getMark("KnownBothEnemy" .. another:objectName()) > 0 then
-			return true
+		if sgs.ais[other:objectName()] then
+			for _, p in ipairs(sgs.ais[other:objectName()].enemies) do
+				if p:objectName() == another:objectName() then return true end
+			end
 		end
-		local of, af = self:isEnemy(other), self:isEnemy(another)
-		return of ~= nil and af ~= nil and of ~= af
+		return false
 	end
 	if self.player:objectName() == other:objectName() then return false end
 	local level = self:objectiveLevel(other)
@@ -2261,6 +2305,8 @@ function SmartAI:askForNullification(trick, from, to, positive)
 		end
 
 	else
+
+		if from and from:objectName() == self.player:objectName() then return end
 
 		if (trick:isKindOf("FireAttack") or trick:isKindOf("Duel") or trick:isKindOf("AOE")) and self:cantbeHurt(to, from) then
 			if isEnemyFrom then return null_card end
@@ -3301,9 +3347,9 @@ function SmartAI:getRetrialCardId(cards, judge, self_card)
 	if reason ~= "lightning" then
 		for _, aplayer in sgs.qlist(self.room:getAllPlayers()) do
 			if aplayer:containsTrick("lightning") then
-				for _, card in ipairs(can_use) do
+				for i, card in ipairs(can_use) do
 					if card:getSuit() == sgs.Card_Spade and card:getNumber() >= 2 and card:getNumber() <= 9 then
-						table.removeOne(can_use, card)
+						table.remove(can_use, i)
 						break
 					end
 				end
@@ -5142,7 +5188,7 @@ function SmartAI:willShowForAttack()
 		end
 	end
 
-	local showRate = math.random() + f/20 + eAtt/10 + shown/20
+	local showRate = math.random() + f/20 + eAtt/10 + shown/20 + sgs.turncount/10
 
 	local firstShowReward = false
 	if sgs.GetConfig("RewardTheFirstShowingPlayer", true) then
@@ -5162,6 +5208,7 @@ function SmartAI:willShowForDefence()
 	if self.room:getMode() == "jiange_defense" then return true end
 	if self.player:hasShownOneGeneral() then return true end
 	if self.room:alivePlayerCount() < 3 then return true end
+	if self:isWeak() then return true end
 
 	local notshown, shown, f, e, eAtt = 0, 0, 0, 0, 0
 	for _,p in sgs.qlist(self.room:getAlivePlayers()) do
@@ -5178,7 +5225,7 @@ function SmartAI:willShowForDefence()
 			end
 		end
 	end
-	local showRate = math.random() - e/10 - self.player:getHp()/10 + shown/20
+	local showRate = math.random() - e/10 - self.player:getHp()/10 + shown/20 + sgs.turncount/10
 
 	local firstShowReward = false
 	if sgs.GetConfig("RewardTheFirstShowingPlayer", true) then
@@ -5214,7 +5261,7 @@ function SmartAI:willShowForMasochism()
 			end
 		end
 	end
-	local showRate = math.random() - self.player:getHp()/10 + e/10 + shown/20
+	local showRate = math.random() - self.player:getHp()/10 + e/10 + shown/20 + sgs.turncount/10
 
 	local firstShowReward = false
 	if sgs.GetConfig("RewardTheFirstShowingPlayer", true) then

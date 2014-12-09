@@ -54,8 +54,8 @@ Dashboard::Dashboard(QGraphicsItem *widget)
       headIcon(NULL), deputyIcon(NULL),
       pendingCard(NULL), viewAsSkill(NULL), filter(NULL),
       m_changeHeadHeroSkinButton(NULL), m_changeDeputyHeroSkinButton(NULL),
-      m_headHeroSkinContainer(NULL), m_deputyHeroSkinContainer(NULL)
-
+      m_headHeroSkinContainer(NULL), m_deputyHeroSkinContainer(NULL),
+      m_progressBarPositon(Down)
 {
     Q_ASSERT(buttonWidget);
     for (int i = 0; i < S_EQUIP_AREA_LENGTH; i++) {
@@ -216,10 +216,17 @@ int Dashboard::getWidth() {
     return this->width;
 }
 
+void Dashboard::updateSkillButton() {
+    if (m_leftSkillDock)
+        m_leftSkillDock->update();
+    if (m_rightSkillDock)
+        m_rightSkillDock->update();
+}
+
 void Dashboard::_createRight() {
     QRect rect = QRect(width - G_DASHBOARD_LAYOUT.m_rightWidth, 0,
-        G_DASHBOARD_LAYOUT.m_rightWidth,
-        G_DASHBOARD_LAYOUT.m_normalHeight);
+                       G_DASHBOARD_LAYOUT.m_rightWidth,
+                       G_DASHBOARD_LAYOUT.m_normalHeight);
     QPixmap pix = QPixmap(1, 1);
     pix.fill(QColor(0, 0, 0, 0));
     _paintPixmap(rightFrame, rect, pix, _m_groupMain);
@@ -260,8 +267,8 @@ void Dashboard::_createRight() {
     _paintPixmap(leftHiddenMark, G_DASHBOARD_LAYOUT.m_hiddenMarkRegion1, _getPixmap(QSanRoomSkin::S_SKIN_KEY_HIDDEN_MARK), rightFrame);
     _paintPixmap(rightHiddenMark, G_DASHBOARD_LAYOUT.m_hiddenMarkRegion2, _getPixmap(QSanRoomSkin::S_SKIN_KEY_HIDDEN_MARK), rightFrame);
 
-    connect(ClientInstance, &Client::head_preshowed, this, &Dashboard::onHeadSkillPreshowed);
-    connect(ClientInstance, &Client::deputy_preshowed, this, &Dashboard::onDeputySkillPreshowed);
+    connect(ClientInstance, &Client::head_preshowed, this, &Dashboard::updateLeftHiddenMark);
+    connect(ClientInstance, &Client::deputy_preshowed, this, &Dashboard::updateRightHiddenMark);
 
 
 
@@ -400,6 +407,9 @@ void Dashboard::_addHandCard(CardItem *card_item, bool prepend, const QString &f
         if (card_item->getTransferButton() && !_transferButtons.contains(card_item->getTransferButton()))
             _transferButtons << card_item->getTransferButton();
     }
+
+    if (m_handCards.size() > maxCardsNumInFirstLine() && m_progressBarPositon != Up)
+        moveProgressBarUp();
 }
 
 void Dashboard::_createRoleComboBox() {
@@ -585,9 +595,9 @@ QSanSkillButton *Dashboard::addSkillButton(const QString &skillName, const bool 
         dock = head ? m_leftSkillDock : m_rightSkillDock;
 
     if (dock == m_leftSkillDock)
-        onHeadSkillPreshowed();
+        updateLeftHiddenMark();
     else
-        onDeputySkillPreshowed();
+        updateRightHiddenMark();
 
     return dock->addSkillButtonByName(skillName);
 }
@@ -897,7 +907,37 @@ QPointF Dashboard::getHeroSkinContainerPosition() const
         ? m_headHeroSkinContainer->boundingRect()
         : m_deputyHeroSkinContainer->boundingRect();;
     return QPointF(avatarParentRect.left() - heroSkinContainerRect.width() - 120,
-        avatarParentRect.bottom() - heroSkinContainerRect.height() - 5);
+                   avatarParentRect.bottom() - heroSkinContainerRect.height() - 5);
+}
+
+void Dashboard::moveProgressBarUp()
+{
+    QPoint pos = _m_progressBar->pos();
+    pos.setY(pos.y() - 20);
+    _m_progressBar->move(pos);
+    m_progressBarPositon = Up;
+}
+
+void Dashboard::moveProgressBarDown()
+{
+    QPoint pos = _m_progressBar->pos();
+    pos.setY(pos.y() + 20);
+    _m_progressBar->move(pos);
+    m_progressBarPositon = Down;
+}
+
+int Dashboard::maxCardsNumInFirstLine() const
+{
+    int maxCards = Config.MaxCards;
+
+    int n = m_handCards.length();
+
+    if (maxCards >= n)
+        maxCards = n;
+    else if (maxCards <= (n - 1) / 2 + 1)
+        maxCards = (n - 1) / 2 + 1;
+
+    return maxCards;
 }
 
 void Dashboard::adjustCards(bool playAnimation) {
@@ -907,15 +947,7 @@ void Dashboard::adjustCards(bool playAnimation) {
 }
 
 void Dashboard::_adjustCards() {
-    int maxCards = Config.MaxCards;
-
-    int n = m_handCards.length();
-    if (n == 0) return;
-
-    if (maxCards >= n)
-        maxCards = n;
-    else if (maxCards <= (n - 1) / 2 + 1)
-        maxCards = (n - 1) / 2 + 1;
+    int maxCards = maxCardsNumInFirstLine();
     QList<CardItem *> row;
     QSanRoomSkin::DashboardLayout *layout = (QSanRoomSkin::DashboardLayout *)_m_layout;
     int leftWidth = layout->m_leftWidth;
@@ -924,6 +956,10 @@ void Dashboard::_adjustCards() {
     QRect rowRect = QRect(leftWidth, layout->m_normalHeight - cardHeight - 3, middleWidth, cardHeight);
     for (int i = 0; i < maxCards; i++)
         row.push_back(m_handCards[i]);
+
+    int n = m_handCards.size();
+    if (n == 0)
+        return;
 
     _m_highestZ = n;
     _disperseCards(row, rowRect, Qt::AlignLeft, true, true);
@@ -993,6 +1029,11 @@ QList<CardItem *> Dashboard::removeHandCards(const QList<int> &card_ids) {
         }
     }
     updateHandcardNum();
+
+    if (m_handCards.size() <= maxCardsNumInFirstLine()
+            && m_progressBarPositon != Down)
+        moveProgressBarDown();
+
     return result;
 }
 
@@ -1115,8 +1156,11 @@ void Dashboard::cancelNullification() {
     }
 }
 
-void Dashboard::controlNullificationButton() {
+void Dashboard::controlNullificationButton(bool keepState)
+{
     if (ClientInstance->getReplayer()) return;
+    if (!keepState)
+        m_btnNoNullification->setFirstState(true);
     m_btnNoNullification->setState(QSanButton::S_STATE_UP);
 }
 
@@ -1390,7 +1434,7 @@ void Dashboard::onHeadStateChanged() {
         _m_shadow_layer1->setBrush(G_DASHBOARD_LAYOUT.m_generalShadowColor);
     else
         _m_shadow_layer1->setBrush(Qt::NoBrush);
-    onHeadSkillPreshowed();
+    updateLeftHiddenMark();
 }
 
 void Dashboard::onDeputyStateChanged() {
@@ -1398,17 +1442,17 @@ void Dashboard::onDeputyStateChanged() {
         _m_shadow_layer2->setBrush(G_DASHBOARD_LAYOUT.m_generalShadowColor);
     else
         _m_shadow_layer2->setBrush(Qt::NoBrush);
-    onDeputySkillPreshowed();
+    updateRightHiddenMark();
 }
 
-void Dashboard::onHeadSkillPreshowed() {
+void Dashboard::updateLeftHiddenMark() {
     if (m_player && RoomSceneInstance->game_started && !m_player->hasShownGeneral1())
         leftHiddenMark->setVisible(m_player->isHidden(true));
     else
         leftHiddenMark->setVisible(false);
 }
 
-void Dashboard::onDeputySkillPreshowed() {
+void Dashboard::updateRightHiddenMark() {
     if (m_player && RoomSceneInstance->game_started && !m_player->hasShownGeneral2())
         rightHiddenMark->setVisible(m_player->isHidden(false));
     else

@@ -656,6 +656,17 @@ sgs.ai_use_priority.AllianceFeast = 8.8
 sgs.ai_keep_value.AllianceFeast = 3.26
 
 sgs.ai_nullification.AllianceFeast = function(self, card, from, to, positive)
+	if positive then
+		if self:isEnemy(to) then
+			if to:objectName() ~= from:objectName() and (to:isWounded() or not to:faceUp()) then return true end
+			if to:objectName() == from:objectName() and to:getMark("alliance_feast") >= 2 then return true end
+		end
+	else
+		if self:isFriend(to) then
+			if to:objectName() ~= from:objectName() and (to:isWounded() or not to:faceUp()) then return true end
+			if to:objectName() == from:objectName() and to:getMark("alliance_feast") >= 2 then return true end
+		end
+	end
 	return
 end
 
@@ -664,6 +675,7 @@ end
 function SmartAI:useCardThreatenEmperor(card, use)
 	if not card:isAvailable(self.player) then return end
 	if self.player:getCardCount(true) < 2 then return end
+	if not self:hasTrickEffective(card, self.player, self.player) then return end
 	use.card = card
 end
 sgs.ai_use_value.ThreatenEmperor = 8
@@ -708,7 +720,14 @@ sgs.ai_skill_cardask["@imperial_order-equip"] = function(self)
 	if self:needToThrowArmor() then
 		return self.player:getArmor():getEffectiveId()
 	end
-	if self.player:getPhase() == sgs.Player_NotActive then
+	local discard
+	local kingdom = self:evaluateKingdom(self.player)
+	if kingdom == "unknown" then discard = true
+	else
+		kingdom = kingdom:split("?")
+		discard = #kingdom / #sgs.KingdomsTable >= 0.5
+	end
+	if self.player:getPhase() == sgs.Player_NotActive and discard then
 		local cards = self.player:getCards("he")
 		local cards = sgs.QList2Table(self.player:getCards("he"))
 			for _, card in ipairs(cards) do
@@ -868,6 +887,7 @@ wooden_ox_skill.getTurnUseCard = function(self)
 		return sgs.Card_Parse("@WoodenOxCard=" .. card:getEffectiveId())
 	end
 	if self:getOverflow() > 0 or (self:needKongcheng() and #cards == 1) then
+		self.wooden_ox_assist = nil
 		return sgs.Card_Parse("@WoodenOxCard=" .. cards[1]:getEffectiveId())
 	end
 end

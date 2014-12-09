@@ -659,10 +659,8 @@ sgs.ai_skill_use["@@liuli"] = function(self, prompt, method)
 	local slash = self.player:getTag("liuli-card"):toCard()
 	local nature = sgs.Slash_Natures[slash:getClassName()]
 
-	if ((not self:willShowForDefence() and self:getCardsNum("Jink") > 1)
-	or (not self:willShowForMasochism() and self:getCardsNum("Jink") == 0))
-	and not source:getMark("drank") > 0
-	then
+	if ((not self:willShowForDefence() and self:getCardsNum("Jink") > 1) or (not self:willShowForMasochism() and self:getCardsNum("Jink") == 0))
+		and source:getMark("drank") == 0 then
 			return "."
 	end
 
@@ -1158,7 +1156,7 @@ sgs.ai_skill_use["@@tianxiang"] = function(self, data, method)
 	end
 
 	if not dmg then self.room:writeToConsole(debug.traceback()) return "." end
-	if not self:willShowForMasochism() and not dmg.damage > 1 then return "." end
+	if not self:willShowForMasochism() and dmg.damage <= 1 then return "." end
 
 	local cards = self.player:getCards("h")
 	cards = sgs.QList2Table(cards)
