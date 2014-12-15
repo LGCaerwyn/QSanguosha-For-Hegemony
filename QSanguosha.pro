@@ -111,6 +111,8 @@ SOURCES += \
     src/ui/graphicspixmaphoveritem.cpp \
     src/ui/heroskincontainer.cpp \
     src/ui/skinitem.cpp \
+    src/ui/tile.cpp \
+    src/ui/choosesuitbox.cpp \
     src/util/detector.cpp \
     src/util/nativesocket.cpp \
     src/util/recorder.cpp \
@@ -219,6 +221,8 @@ HEADERS += \
     src/ui/graphicspixmaphoveritem.h \
     src/ui/heroskincontainer.h \
     src/ui/skinitem.h \
+    src/ui/tile.h \
+    src/ui/choosesuitbox.h \
     src/util/detector.h \
     src/util/nativesocket.h \
     src/util/recorder.h \

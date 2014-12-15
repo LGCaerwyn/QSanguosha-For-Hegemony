@@ -18,48 +18,41 @@
     QSanguosha-Rara
     *********************************************************************/
 
-#ifndef _CHOOSE_OPTIONS_BOX_H
-#define _CHOOSE_OPTIONS_BOX_H
+#ifndef CHOOSESUITBOX_H
+#define CHOOSESUITBOX_H
 
 #include "graphicsbox.h"
 
 class Button;
-class QSanCommandProgressBar;
 class QGraphicsProxyWidget;
+class QSanCommandProgressBar;
 
-class ChooseOptionsBox : public GraphicsBox {
-    Q_OBJECT
-
+class ChooseSuitBox : public GraphicsBox
+{
 public:
-    explicit ChooseOptionsBox();
+    ChooseSuitBox();
 
     QRectF boundingRect() const;
 
-    inline void setSkillName(const QString &skillName) { this->skillName = skillName; }
+    void chooseSuit(const QStringList &suits);
     void clear();
 
-public slots:
-    void chooseOption(const QStringList &options);
-    void reply();
-
 private:
-    int optionsNumber;
-    QStringList options;
-    QString skillName;
+    int suitNumber;
+    QStringList m_suits;
     QList<Button *> buttons;
-    static const int minButtonWidth = 100;
-    static const int defaultButtonHeight = 30;
-    static const int topBlankWidth = 42;
-    static const int bottomBlankWidth = 25;
-    static const int interval = 15;
-    static const int outerBlankWidth = 37;
+
+    static const int outerBlankWidth;
+    static const int buttonWidth;
+    static const int buttonHeight;
+    static const int interval;
+    static const int topBlankWidth;
+    static const int bottomBlankWidth;
 
     QGraphicsProxyWidget *progressBarItem;
     QSanCommandProgressBar *progressBar;
 
-    int getButtonWidth() const;
-
-    QString translate(const QString &option) const;
+    void reply();
 };
 
-#endif // _CHOOSE_OPTIONS_BOX_H
+#endif // CHOOSESUITBOX_H
