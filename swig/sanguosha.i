@@ -791,6 +791,24 @@ struct PlayerNumStruct {
     QString m_reason;
 };
 
+struct ServerInfoStruct {
+    const QString Name;
+    const QString GameMode;
+    const int OperationTimeout;
+    const int NullificationCountDown;
+    const QStringList Extensions;
+    const bool RandomSeat;
+    const bool EnableCheat;
+    const bool FreeChoose;
+	const bool ForbidAddingRobot;
+    const bool DisableChat;
+    const bool FirstShowingReward;
+
+    const bool DuringGame;
+};
+
+extern ServerInfoStruct ServerInfo;
+
 enum TriggerEvent {
     NonTrigger,
 
@@ -1261,7 +1279,7 @@ public:
     virtual int getPriority() const;
     virtual bool triggerable(const ServerPlayer *target) const;
 
-    //virtual QMap<ServerPlayer *, QStringList> triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
+    //virtual TriggerList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
     virtual QStringList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer* &ask_who) const;
     virtual bool cost(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
     virtual bool effect(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
@@ -1276,7 +1294,7 @@ public:
         return qobject_cast<const BattleArraySkill *>($self);
     }
 
-    QMap<ServerPlayer *, QStringList> TriggerSkillTriggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
+    TriggerList TriggerSkillTriggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
         return $self->TriggerSkill::triggerable(triggerEvent, room, player, data);
     }
 };

@@ -60,6 +60,17 @@ Button::Button(const QPixmap &pixmap, const QSizeF &size)
     prepareIcons();
 }
 
+void Button::setText(const QString &text)
+{
+    if (label != text) {
+        label = text;
+        delete m_icon;
+        delete m_colorReversedIcon;
+        initTextItems();
+        prepareIcons();
+    }
+}
+
 void Button::init()
 {
     setAcceptHoverEvents(true);
@@ -70,6 +81,7 @@ void Button::init()
     setAcceptedMouseButtons(Qt::LeftButton);
     setFlags(ItemIsFocusable);
     connect(this, &Button::enabledChanged, this, &Button::onEnabledChanged);
+    connect(this, &Button::visibleChanged, this, &Button::onVisibleChanged);
 }
 
 void Button::initTextItems()
@@ -188,4 +200,11 @@ void Button::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget 
 void Button::onEnabledChanged()
 {
     setOpacity(isEnabled() ? 1.0 : 0.2);
+}
+
+void Button::onVisibleChanged()
+{
+    //reset hover state
+    if (!isVisible())
+        setTextColorReversed(false);
 }
