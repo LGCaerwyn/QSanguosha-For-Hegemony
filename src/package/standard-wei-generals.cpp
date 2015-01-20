@@ -352,8 +352,8 @@ public:
         frequency = Frequent;
     }
 
-    virtual QStringList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer * &ask_who) const{
-        if (TriggerSkill::triggerable(triggerEvent, room, player, data, ask_who).contains(objectName())){
+    virtual QStringList triggerable(TriggerEvent, Room *, ServerPlayer *player, QVariant &data, ServerPlayer* &) const{
+        if (TriggerSkill::triggerable(player)){
             DamageStruct damage = data.value<DamageStruct>();
             QStringList trigger_list;
             for (int i = 1; i <= damage.damage; i++){
@@ -367,7 +367,7 @@ public:
     }
 
     virtual bool cost(TriggerEvent, Room *room, ServerPlayer *guojia, QVariant &data, ServerPlayer *) const {
-        if (guojia->isAlive() && guojia->askForSkillInvoke(this, data)) {
+        if (guojia->askForSkillInvoke(this, data)) {
             room->broadcastSkillInvoke(objectName(), guojia);
             return true;
         }
@@ -377,7 +377,6 @@ public:
 
     virtual void onDamaged(ServerPlayer *guojia, const DamageStruct &) const {
         Room *room = guojia->getRoom();
-        room->notifySkillInvoked(guojia, objectName());
 
         QList<ServerPlayer *> _guojia;
         _guojia.append(guojia);
@@ -686,8 +685,25 @@ bool QiaobianCard::targetFilter(const QList<const Player *> &targets, const Play
     Player::Phase phase = (Player::Phase)Self->getMark("qiaobianPhase");
     if (phase == Player::Draw)
         return targets.length() < 2 && to_select != Self && !to_select->isKongcheng();
-    else if (phase == Player::Play)
-        return targets.isEmpty() && (!to_select->getJudgingArea().isEmpty() || !to_select->getEquips().isEmpty());
+    else if (phase == Player::Play) {
+        if (!targets.isEmpty())
+            return false;
+        foreach (const Card *card, to_select->getEquips()) {
+            const EquipCard *equip = qobject_cast<const EquipCard *>(card->getRealCard());
+            Q_ASSERT(equip);
+            int equip_index = static_cast<int>(equip->location());
+            foreach (const Player *p, to_select->getSiblings()) {
+                if (!p->getEquip(equip_index))
+                    return true;
+            }
+        }
+        foreach (const Card *card, to_select->getJudgingArea()) {
+            foreach (const Player *p, to_select->getSiblings()) {
+                if (!p->containsTrick(card->objectName()))
+                    return true;
+            }
+        }
+    }
     return false;
 }
 
@@ -804,8 +820,9 @@ public:
         case Player::Discard: index = 4; break;
         case Player::PhaseNone: Q_ASSERT(false);
         }
-        return (TriggerSkill::triggerable(player) && index > 0 && !player->isSkipped(change.to)
-            && player->canDiscard(player, "h")) ? QStringList(objectName()) : QStringList();
+        if (TriggerSkill::triggerable(player) && index > 0 && player->canDiscard(player, "h"))
+            return QStringList(objectName());
+        return QStringList();
     }
 
     virtual bool cost(TriggerEvent, Room *room, ServerPlayer *zhanghe, QVariant &data, ServerPlayer *) const{
@@ -834,10 +851,10 @@ public:
 
         QString discard_prompt = QString("#qiaobian:::%1").arg(phase_strings[index]);
 
-        if (room->askForDiscard(zhanghe, objectName(), 1, 1, true, false, discard_prompt)) {
+        if (room->askForDiscard(zhanghe, objectName(), 1, 1, true, false, discard_prompt, true)) {
             room->broadcastSkillInvoke("qiaobian", zhanghe);
             if (!zhanghe->isAlive()) return false;
-            if (!zhanghe->isSkipped(change.to))
+            if (!zhanghe->isSkipped(change.to)) // warning!
                 return true;
         }
         return false;

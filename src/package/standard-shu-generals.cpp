@@ -171,7 +171,7 @@ public:
                     foreach (ServerPlayer *to, use.to)
                         targets << to->objectName();
                     if (!targets.isEmpty())
-                        return QStringList(objectName() + "!" + targets.join("+") + "&");
+                        return QStringList(objectName() + "->" + targets.join("+"));
                 }
             }
         }
@@ -382,8 +382,8 @@ public:
     }
 
     virtual bool effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *) const{
+        room->sendCompulsoryTriggerLog(player, objectName());
         CardUseStruct use = data.value<CardUseStruct>();
-        room->notifySkillInvoked(player, objectName());
 
         room->cancelTarget(use, player); // Room::cancelTarget(use, player);
 
@@ -510,15 +510,14 @@ public:
         frequency = Frequent;
     }
 
-    virtual QStringList triggerable(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer* &) const {
+    virtual QStringList triggerable(TriggerEvent, Room *, ServerPlayer *player, QVariant &data, ServerPlayer* &) const {
         CardUseStruct use = data.value<CardUseStruct>();
         if (TriggerSkill::triggerable(player) && use.card != NULL && use.card->isKindOf("Slash")) {
             QStringList targets;
-            room->sortByActionOrder(use.to);
             foreach (ServerPlayer *to, use.to)
                 targets << to->objectName();
             if (!targets.isEmpty())
-                return QStringList(objectName() + "!" + targets.join("+") + "&");
+                return QStringList(objectName() + "->" + targets.join("+"));
         }
         return QStringList();
     }
@@ -640,18 +639,17 @@ public:
         events << TargetChosen;
     }
 
-    virtual QStringList triggerable(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer* &) const {
+    virtual QStringList triggerable(TriggerEvent, Room *, ServerPlayer *player, QVariant &data, ServerPlayer* &) const {
         CardUseStruct use = data.value<CardUseStruct>();
         if (TriggerSkill::triggerable(player) && player->getPhase() == Player::Play && use.card != NULL && use.card->isKindOf("Slash")) {
             QStringList targets;
-            room->sortByActionOrder(use.to);
             foreach (ServerPlayer *to, use.to) {
                 int handcard_num = to->getHandcardNum();
                 if (handcard_num >= player->getHp() || handcard_num <= player->getAttackRange())
                     targets << to->objectName();
             }
             if (!targets.isEmpty())
-                return QStringList(objectName() + "!" + targets.join("+") + "&");
+                return QStringList(objectName() + "->" + targets.join("+"));
         }
         return QStringList();
     }
@@ -758,12 +756,7 @@ public:
     }
 
     virtual bool effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &, ServerPlayer *) const{
-        LogMessage log;
-        log.type = "#TriggerSkill";
-        log.from = player;
-        log.arg = objectName();
-        room->sendLog(log);
-        room->notifySkillInvoked(player, objectName());
+        room->sendCompulsoryTriggerLog(player, objectName());
 
         RecoverStruct recover;
         recover.who = player;
@@ -951,6 +944,8 @@ bool SavageAssaultAvoid::cost(TriggerEvent, Room *room, ServerPlayer *player, QV
 }
 
 bool SavageAssaultAvoid::effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &, ServerPlayer *) const{
+    room->notifySkillInvoked(player, avoid_skill);
+
     LogMessage log;
     log.type = "#SkillNullify";
     log.from = player;
@@ -1006,7 +1001,7 @@ public:
     }
 
     virtual bool effect(TriggerEvent, Room *room, ServerPlayer *, QVariant &, ServerPlayer *ask_who) const{
-        room->notifySkillInvoked(ask_who, objectName());
+        room->sendCompulsoryTriggerLog(ask_who, objectName());
         room->setTag("HuoshouSource", QVariant::fromValue(ask_who));
 
         return false;
@@ -1126,12 +1121,7 @@ public:
 
     virtual bool effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *) const{
         CardsMoveOneTimeStruct move = data.value<CardsMoveOneTimeStruct>();
-        room->notifySkillInvoked(player, objectName());
-        LogMessage log;
-        log.type = "#TriggerSkill";
-        log.from = player;
-        log.arg = objectName();
-        room->sendLog(log);
+        room->sendCompulsoryTriggerLog(player, objectName());
 
         DummyCard sa(move.card_ids);
         player->obtainCard(&sa);
@@ -1207,13 +1197,7 @@ public:
 
     virtual bool cost(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *) const{
         if (player->hasShownSkill(this)) {
-            room->notifySkillInvoked(player, objectName());
-
-            LogMessage log;
-            log.type = "#TriggerSkill";
-            log.from = player;
-            log.arg = objectName();
-            room->sendLog(log);
+            room->sendCompulsoryTriggerLog(player, objectName());
         } else if (!player->askForSkillInvoke(this, data))
             return false;
 
@@ -1333,7 +1317,7 @@ public:
         if (TriggerSkill::triggerable(player)) {
             QList<ServerPlayer *> friends;
             foreach (ServerPlayer *p, room->getOtherPlayers(player)) {
-                if (player->isFriendWith(p) || player->willBeFriendWith(p))
+                if (player->willBeFriendWith(p))
                     friends << p;
             }
 
@@ -1353,7 +1337,7 @@ public:
     virtual bool cost(TriggerEvent, Room *room, ServerPlayer *player, QVariant &, ServerPlayer *) const{
         QList<ServerPlayer *> friends;
         foreach (ServerPlayer *p, room->getOtherPlayers(player)){
-            if (player->isFriendWith(p) || player->willBeFriendWith(p))
+            if (player->willBeFriendWith(p))
                 friends << p;
         }
 
