@@ -25,10 +25,12 @@ public:
     void setViewAsSkill(ViewAsSkill *view_as_skill);
     void setGlobal(bool global);
     void setCanPreshow(bool preshow);
+    void setGuhuoType(const char *type);
+    
 
     virtual int getPriority() const;
 
-    virtual QMap<ServerPlayer *, QStringList> triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
+    virtual TriggerList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
     virtual bool cost(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
     virtual bool effect(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
 
@@ -57,7 +59,7 @@ public:
 
     virtual int getPriority() const;
 
-    virtual QMap<ServerPlayer *, QStringList> triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
+    virtual TriggerList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
     virtual bool cost(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
     virtual bool effect(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
 
@@ -120,6 +122,8 @@ class LuaViewAsSkill: public ViewAsSkill {
 public:
     LuaViewAsSkill(const char *name, const char *response_pattern, bool response_or_use, const char *expand_pile);
 
+    void setGuhuoType(const char *type);
+    
     virtual bool viewFilter(const QList<const Card *> &selected, const Card *to_select) const;
     virtual const Card *viewAs(const QList<const Card *> &cards) const;
 
@@ -344,7 +348,7 @@ public:
 #include "lua-wrapper.h"
 #include "clientplayer.h"
 
-QMap<ServerPlayer *, QStringList> LuaTriggerSkill::triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
+TriggerList LuaTriggerSkill::triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
     if (can_trigger == 0)
         return TriggerSkill::triggerable(triggerEvent, room, player, data);
 
@@ -375,18 +379,18 @@ QMap<ServerPlayer *, QStringList> LuaTriggerSkill::triggerable(TriggerEvent trig
         return TriggerSkill::triggerable(triggerEvent, room, player, data);
     } else {
         QString trigger_str = lua_tostring(l, -2);
-        QMap<ServerPlayer *, QStringList> skill_list;
+        TriggerList skill_list;
         QString obj_name_str = lua_tostring(l, -1);
         if (obj_name_str.isNull()) {
             void *ask_who_p = NULL;
             int convert_result = SWIG_ConvertPtr(l, -1, &ask_who_p, SWIGTYPE_p_ServerPlayer, 0);
             if (!SWIG_IsOK(convert_result) || ask_who_p == NULL) {
                 ServerPlayer *who = player;
-                QStringList trigger_list = trigger_str.split("+");
+                QStringList trigger_list = trigger_str.split(",");
                 skill_list.insert(who, trigger_list);
             } else {
                 ServerPlayer *who = static_cast<ServerPlayer *>(ask_who_p);
-                QStringList trigger_list = trigger_str.split("+");
+                QStringList trigger_list = trigger_str.split(",");
                 skill_list.insert(who, trigger_list);
             }
         } else {
@@ -395,10 +399,10 @@ QMap<ServerPlayer *, QStringList> LuaTriggerSkill::triggerable(TriggerEvent trig
             int index = 0;
             while (who_skill_list.size() > index) {
                 ServerPlayer *who = player;
-                if (obj_name_list.at(index).size() > index)
+                if (obj_name_list.size() > index)
                     who = room->findPlayer(obj_name_list.at(index), true);
                 if (who)
-                    skill_list.insert(who, who_skill_list.at(index).split("+"));
+                    skill_list.insert(who, who_skill_list.at(index).split(","));
                 index++;
             }
         }
@@ -490,9 +494,9 @@ bool LuaTriggerSkill::effect(TriggerEvent triggerEvent, Room *room, ServerPlayer
     }
 }
 
-QMap<ServerPlayer *, QStringList> LuaBattleArraySkill::triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
+TriggerList LuaBattleArraySkill::triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const{
     if (can_trigger == 0) {
-        QMap<ServerPlayer *, QStringList> r;
+        TriggerList r;
         if (BattleArraySkill::triggerable(player))
             r[player] << objectName();
 
@@ -526,7 +530,7 @@ QMap<ServerPlayer *, QStringList> LuaBattleArraySkill::triggerable(TriggerEvent 
         return TriggerSkill::triggerable(triggerEvent, room, player, data);
     } else {
         QString trigger_str = lua_tostring(l, -2);
-        QMap<ServerPlayer *, QStringList> skill_list;
+        TriggerList skill_list;
         QString obj_name_str = lua_tostring(l, -1);
         if (obj_name_str.isNull()) {
             void *ask_who_p = NULL;
