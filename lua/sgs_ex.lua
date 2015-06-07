@@ -1,5 +1,5 @@
 --[[********************************************************************
-	Copyright (c) 2013-2014 - QSanguosha-Rara
+	Copyright (c) 2013-2015 Mogara
 
   This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
   See the LICENSE file for more details.
 
-  QSanguosha-Rara
+  Mogara
 *********************************************************************]]
 
 -- this script file defines all functions written by Lua
@@ -80,7 +80,10 @@ function sgs.CreateTriggerSkill(spec)
 	if type(spec.priority) == "number" then
 		skill.priority = spec.priority
 	end
-
+	if spec.on_turn_broken then
+		skill.on_turn_broken = spec.on_turn_broken
+	end
+	
 	return skill
 end
 
@@ -250,6 +253,9 @@ function sgs.CreateSkillCard(spec)
 
 	if type(spec.can_recast) == "boolean" then
 		card:setCanRecast(spec.can_recast)
+	end
+	if type(spec.mute) == "boolean" then
+		card:setMute(spec.mute)
 	end
 
 	if type(spec.handling_method) == "number" then
@@ -564,6 +570,8 @@ function sgs.CreateOneCardViewAsSkill(spec)
 			if string.endsWith(pat, "!") then
 				if sgs.Self:isJilei(to_select) then return false end
 				pat = string.sub(pat, 1, -2)
+			elseif spec.response_or_use and string.find(pat,"hand") then
+				pat = string.gsub(pat,"hand", table.concat(sgs.Self:getHandPileList(),","))
 			end
 			return sgs.Sanguosha:matchExpPattern(pat, sgs.Self, to_select)
 		end
@@ -572,11 +580,11 @@ function sgs.CreateOneCardViewAsSkill(spec)
 	skill.enabled_at_play = spec.enabled_at_play
 	skill.enabled_at_response = spec.enabled_at_response
 	skill.enabled_at_nullification = spec.enabled_at_nullification
-	
+
 	if type(spec.guhuo_type) == "string" and spec.guhuo_type ~= ""then
 		skill:setGuhuoType(spec.guhuo_type)
 	end
-	
+
 	return skill
 end
 
@@ -604,11 +612,11 @@ function sgs.CreateZeroCardViewAsSkill(spec)
 	skill.enabled_at_play = spec.enabled_at_play
 	skill.enabled_at_response = spec.enabled_at_response
 	skill.enabled_at_nullification = spec.enabled_at_nullification
-	
+
 	if type(spec.guhuo_type) == "string" and spec.guhuo_type ~= ""then
 		skill:setGuhuoType(spec.guhuo_type)
 	end
-	
+
 	return skill
 end
 
@@ -741,4 +749,30 @@ function sgs.LoadSkinTransltionTable(t)
 	for key, value in pairs(t) do
 		sgs.AddTranslationEntry(f(key), value)
 	end
+end
+
+function sgs.CreateLuaScenario(spec)
+	assert(type(spec.name) == "string")
+	assert(type(spec.rule == "userdata") and spec.rule:inherits("LuaTriggerSkill"))
+	assert(type(spec.player_count) == "number")
+	assert(type(spec.random_seat) == "boolean")
+	local scenario = sgs.LuaScenario(spec.name)
+	scenario:setRandomSeat(spec.random_seat)
+	scenario:setRule(spec.rule)
+	if type(spec.expose_role) == "boolean" then
+		scenario.expose_role = spec.expose_role
+	end
+	scenario.player_count = spec.player_count
+	if type(spec.on_assign) == "function" then
+		scenario.general_selection = false
+		scenario.on_assign = function(self,room)
+			local general1,general2,kingdom = spec.on_assign(self,room)
+			return table.concat(general1,"+"),table.concat(general2,"+"),table.concat(kingdom,"+")
+		end
+	else
+		scenario.general_selection = true
+	end
+	scenario.relation = spec.relation or 0
+	scenario.on_tag_set = spec.on_tag_set or 0
+	return scenario
 end

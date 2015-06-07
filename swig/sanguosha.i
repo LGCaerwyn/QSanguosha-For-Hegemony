@@ -1,5 +1,5 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Rara
+    Copyright (c) 2013-2015 - Mogara
 
   This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
   See the LICENSE file for more details.
 
-  QSanguosha-Rara
+  Mogara
 *********************************************************************/
 
 %module sgs
@@ -275,6 +275,7 @@ public:
 	
 	//Xusine:
     QList<int> getHandPile() const;
+    QStringList getHandPileList(bool view_as_skill = true) const;
 
     void addHistory(const char *name, int times = 1);
     void clearHistory(const char *name = "");
@@ -290,6 +291,8 @@ public:
     QString getSkillDescription(bool inToolTip = true) const;
     QString getHeadSkillDescription() const;
     QString getDeputySkillDescription() const;
+    
+    QStringList getAcquiredSkills(const char *flags) const;
 
     virtual bool isProhibited(const Player *to, const Card *card, const QList<const Player *> &others = QList<const Player *>()) const;
     bool canSlashWithoutCrossbow(const Card *slash = NULL) const;
@@ -357,6 +360,8 @@ public:
     QList<const Player *> getFormation() const;
 
     virtual QStringList getBigKingdoms(const char *reason, MaxCardsType::MaxCardsCount type = MaxCardsType::Min) const = 0;
+
+    QStringList getAcquiredSkills(const QString &flags) const;
 };
 
 %extend Player {
@@ -371,6 +376,10 @@ public:
     void removeTag(const char *tag_name) {
         $self->tag.remove(tag_name);
     }
+    bool operator==(Player *other) {
+        return $self->objectName() == other->objectName();
+    }
+    
 };
 
 class ServerPlayer: public Player {
@@ -812,7 +821,8 @@ struct ServerInfoStruct {
 
 extern ServerInfoStruct ServerInfo;
 
-enum TriggerEvent {
+enum TriggerEvent
+{
     NonTrigger,
 
     GameStart,
@@ -906,7 +916,7 @@ enum TriggerEvent {
     GeneralHidden, // For Official Hegemony mode
     GeneralRemoved, // For Official Hegemony mode
 
-    DFDebut,
+    DFDebut, // for Dragon Phoenix Debut
 
     NumOfEvents
 };
@@ -1307,9 +1317,11 @@ public:
 class QThread: public QObject {
 };
 
-struct LogMessage {
+struct LogMessage
+{
     LogMessage();
     QString toString() const;
+    QVariant toVariant() const;
 
     QString type;
     ServerPlayer *from;
@@ -1343,6 +1355,7 @@ public:
     bool canPause(ServerPlayer *p) const;
     void tryPause();
     QString getMode() const;
+    const Scenario *getScenario() const;
     RoomThread *getThread() const;
     ServerPlayer *getCurrent() const;
     void setCurrent(ServerPlayer *current);
@@ -1401,7 +1414,7 @@ public:
     void provide(const Card *card);
     QList<ServerPlayer *> getLieges(const char *kingdom, ServerPlayer *lord) const;
     void sendLog(const LogMessage &log);
-    void sendCompulsoryTriggerLog(ServerPlayer *player, const QString &skill_name, bool notify_skill);
+    void sendCompulsoryTriggerLog(ServerPlayer *player, const char *skill_name, bool notify_skill);
     void showCard(ServerPlayer *player, int card_id, ServerPlayer *only_viewer = NULL);
     void showAllCards(ServerPlayer *player, ServerPlayer *to = NULL);
     void retrial(const Card *card, ServerPlayer *player, JudgeStruct *judge, const char *skill_name, bool exchange = false);
@@ -1452,7 +1465,7 @@ public:
     ServerPlayer *findPlayerBySkillName(const char *skill_name) const;
     void installEquip(ServerPlayer *player, const char *equip_name);
     void resetAI(ServerPlayer *player);
-    //void changeHero(ServerPlayer *player, const char *new_general, bool full_state, bool invoke_start = true, bool isSecondaryHero = false, bool sendLog = true);
+    void doDragonPhoenix(ServerPlayer *target, const char *general1_name, const char *general2_name, bool full_state = true,const char *kingdom = QString(), bool sendLog = true, const char *show_flags = QString(), bool resetHp = false);// When using this function,be careful.
     void swapSeat(ServerPlayer *a, ServerPlayer *b);
     void setFixedDistance(Player *from, const Player *to, int distance);
     ServerPlayer *getFront(ServerPlayer *a, ServerPlayer *b) const;
@@ -1542,6 +1555,9 @@ public:
     inline void resetCard(int cardId);
     void updateCardsOnLose(const CardsMoveStruct &move);
     void updateCardsOnGet(const CardsMoveStruct &move);
+    
+    // this function must be called in Scenario::assign ONLY.
+   void chooseGenerals(QList<ServerPlayer *> &assign_players,bool has_assign = false,bool is_scenario = false);
 
     // these 2 functions puts here, for convenience
     static void cancelTarget(CardUseStruct &use, const char *name);
@@ -1573,7 +1589,9 @@ public:
 
 %{
 
-void Room::doScript(const QString &script) {
+
+void Room::doScript(const QString &script)
+{
     SWIG_NewPointerObj(L, this, SWIGTYPE_p_Room, 0);
     lua_setglobal(L, "R");
 
@@ -1581,7 +1599,7 @@ void Room::doScript(const QString &script) {
     lua_setglobal(L, "P");
 
     int err = luaL_dostring(L, script.toLatin1());
-    if (err){
+    if (err) {
         QString err_str = lua_tostring(L, -1);
         lua_pop(L, 1);
         output(err_str);

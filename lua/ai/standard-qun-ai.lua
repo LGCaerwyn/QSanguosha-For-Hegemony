@@ -1,5 +1,5 @@
 --[[********************************************************************
-	Copyright (c) 2013-2014 - QSanguosha-Rara
+	Copyright (c) 2013-2015 Mogara
 
   This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
   See the LICENSE file for more details.
 
-  QSanguosha-Rara
+  Mogara
 *********************************************************************]]
 
 local qingnang_skill = {}
@@ -56,19 +56,11 @@ sgs.ai_use_priority.QingnangCard = 4.2
 sgs.ai_card_intention.QingnangCard = -100
 
 sgs.dynamic_value.benefit.QingnangCard = true
-local isInPile = function(player,id)
-	for _,pile in sgs.list(player:getPileNames())do
-		if pile:startsWith("&") or pile == "wooden_ox" then
-			if player:getPile(pile):contains(id) then return true end
-		end
-	end
-	return false
-end
 sgs.ai_view_as.jijiu = function(card, player, card_place)
 	local suit = card:getSuitString()
 	local number = card:getNumberString()
 	local card_id = card:getEffectiveId()
-	if (card_place ~= sgs.Player_PlaceSpecial or isInPile(player,card_id)) and card:isRed() and player:getPhase() == sgs.Player_NotActive
+	if (card_place ~= sgs.Player_PlaceSpecial or player:getHandPile():contains(card_id)) and card:isRed() and player:getPhase() == sgs.Player_NotActive
 		and not player:hasFlag("Global_PreventPeach") and (player:getMark("@qianxi_red") <= 0 or card:isEquipped()) then
 		return ("peach:jijiu[%s:%s]=%d&jijiu"):format(suit, number, card_id)
 	end
@@ -110,8 +102,8 @@ sgs.ai_skill_invoke.wushuang = function(self, data)
 	local current_trigger = data:toPlayer()
 	local index = use.to:indexOf(current_trigger)
 	local left_trigger = sgs.SPlayerList()
-	for i = index, use.to:length() - 1, 1 do 
-		left_trigger:append(use.to:at(i)) 
+	for i = index, use.to:length() - 1, 1 do
+		left_trigger:append(use.to:at(i))
 	end
 	if use.card then
 		if use.card:isKindOf("Duel") then
@@ -577,7 +569,7 @@ sgs.ai_skill_invoke.weimu = function(self, data)
 		end
 	end
 	if self:isWeak() then return true end
-	if not self:willShowForDefence() then return false end	
+	if not self:willShowForDefence() then return false end
 	return true
 end
 
@@ -603,12 +595,8 @@ sgs.ai_skill_cardask["@guidao-card"]=function(self, data)
 	if not (self:willShowForAttack() or self:willShowForDefence() ) then return "." end
 	local judge = data:toJudge()
 	local all_cards = self.player:getCards("he")
-	for _,pile in sgs.list(self.player:getPileNames())do
-		if pile:startsWith("&") or pile == "wooden_ox" then
-			for _, id in sgs.qlist(self.player:getPile(pile)) do
-				all_cards:prepend(sgs.Sanguosha:getCard(id))
-			end
-		end
+	for _, id in sgs.qlist(self.player:getHandPile()) do
+		all_cards:prepend(sgs.Sanguosha:getCard(id))
 	end
 	if all_cards:isEmpty() then return "." end
 

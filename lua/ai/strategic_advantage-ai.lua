@@ -1,5 +1,5 @@
 --[[********************************************************************
-	Copyright (c) 2013-2014 - QSanguosha-Rara
+	Copyright (c) 2013-2015 Mogara
 
   This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
   See the LICENSE file for more details.
 
-  QSanguosha-Rara
+  Mogara
 *********************************************************************]]
 
 --transfer
@@ -49,7 +49,7 @@ sgs.ai_skill_use_func.TransferCard = function(transferCard, use, self)
 			if not oneJink and isCard("Jink", c, self.player) then
 				oneJink = true
 				continue
-			elseif c:getNumber() > 10 and self.player:hasSkills("tianyi|quhu|shuangren|lieren") then 
+			elseif c:getNumber() > 10 and self.player:hasSkills("tianyi|quhu|shuangren|lieren") then
 				continue
 			end
 			table.insert(cards, c)
@@ -883,7 +883,7 @@ wooden_ox_skill.getTurnUseCard = function(self)
 	if self.player:hasUsed("WoodenOxCard") or self.player:isKongcheng() or not self.player:hasTreasure("WoodenOx") then return end
 	local cards = sgs.QList2Table(self.player:getHandcards())
 	self:sortByUseValue(cards, true)
-	local card, friend = self:getCardNeedPlayer(cards)
+	local card, friend = self:getCardNeedPlayer(cards, self.friends_noself)
 	if card and friend and friend:objectName() ~= self.player:objectName() and (self:getOverflow() > 0 or self:isWeak(friend)) then
 		self.wooden_ox_assist = friend
 		return sgs.Card_Parse("@WoodenOxCard=" .. card:getEffectiveId())

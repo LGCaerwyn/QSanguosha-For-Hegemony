@@ -1,5 +1,5 @@
 --[[********************************************************************
-	Copyright (c) 2013-2014 - QSanguosha-Rara
+	Copyright (c) 2013-2015 Mogara
 
   This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
   See the LICENSE file for more details.
 
-  QSanguosha-Rara
+  Mogara
 *********************************************************************]]
 
 -- This is the start script of QSanguosha
@@ -29,7 +29,7 @@ dofile "lua/about_us.lua"
 function load_translation(file)
 	local t = dofile(file)
 	if type(t) ~= "table" then
-	    error(("file %s is should return a table!"):format(file))
+		error(("file %s is should return a table!"):format(file))
 	end
 
 	sgs.LoadTranslationTable(t)
@@ -66,6 +66,9 @@ function load_extensions(just_require)
 	sgs.SetConfig("LuaPackages", lua_packages)
 end
 ]]
+
+global_packages = {}
+
 function load_extensions()
 	local scripts = sgs.GetFileNames("extensions")
 	local package_names = {}
@@ -78,7 +81,12 @@ function load_extensions()
 			for _, extension in ipairs(extensions) do
 				local name = extension:objectName()
 				table.insert(package_names, name)
-				sgs.Sanguosha:addPackage(extension)
+				if extension:inherits("LuaScenario") then
+					sgs.Sanguosha:addScenario(extension)
+				elseif extension:inherits("Package") then
+					sgs.Sanguosha:addPackage(extension)
+				end
+				table.insert(global_packages, extension)
 			end
 		end
 	end

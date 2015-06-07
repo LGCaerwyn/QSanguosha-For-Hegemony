@@ -1,5 +1,5 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Rara
+    Copyright (c) 2013-2015 - Mogara
 
     This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
     See the LICENSE file for more details.
 
-    QSanguosha-Rara
+    Mogara
     *********************************************************************/
 
 #ifndef GENERALSELECTOR_H
@@ -29,7 +29,8 @@
 class ServerPlayer;
 
 // singleton class
-class GeneralSelector : public QObject {
+class GeneralSelector : public QObject
+{
     Q_OBJECT
 
 public:

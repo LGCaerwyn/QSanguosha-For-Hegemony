@@ -1,5 +1,5 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Rara
+    Copyright (c) 2013-2015 - Mogara
 
     This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
     See the LICENSE file for more details.
 
-    QSanguosha-Rara
+    Mogara
     *********************************************************************/
 
 #include "button.h"
@@ -38,7 +38,7 @@ Button::Button(const QString &label, qreal scale)
 
 Button::Button(const QPixmap &pixmap, qreal scale)
     : size(ButtonRect.size() * scale),
-      m_icon(new QGraphicsPixmapItem(pixmap, this)), m_colorReversedIcon(NULL)
+    m_icon(new QGraphicsPixmapItem(pixmap, this)), m_colorReversedIcon(NULL)
 {
     init();
     prepareIcons();
@@ -54,7 +54,7 @@ Button::Button(const QString &label, const QSizeF &size)
 
 Button::Button(const QPixmap &pixmap, const QSizeF &size)
     : size(size),
-      m_icon(new QGraphicsPixmapItem(pixmap, this)), m_colorReversedIcon(NULL)
+    m_icon(new QGraphicsPixmapItem(pixmap, this)), m_colorReversedIcon(NULL)
 {
     init();
     prepareIcons();

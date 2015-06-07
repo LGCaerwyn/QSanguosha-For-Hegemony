@@ -1,5 +1,5 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Rara
+    Copyright (c) 2013-2015 - Mogara
 
     This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
     See the LICENSE file for more details.
 
-    QSanguosha-Rara
+    Mogara
     *********************************************************************/
 
 #ifndef _CHOOSE_GENERAL_BOX_H
@@ -28,7 +28,8 @@
 class Button;
 class QGraphicsDropShadowEffect;
 
-class GeneralCardItem : public CardItem {
+class GeneralCardItem : public CardItem
+{
     Q_OBJECT
 
 public:
@@ -49,7 +50,8 @@ public slots:
     virtual void changeGeneral(const QString &generalName);
 };
 
-class ChooseGeneralBox : public GraphicsBox {
+class ChooseGeneralBox : public GraphicsBox
+{
     Q_OBJECT
 
 public:
@@ -60,9 +62,7 @@ public:
     void clear();
 
 public slots:
-    void chooseGeneral(const QStringList &generals, bool m_viewOnly = false,
-                       bool single_result = false, const QString &reason = QString(),
-                       const Player *player = NULL);
+    void chooseGeneral(const QStringList &generals, bool m_viewOnly = false, bool single_result = false, const QString &reason = QString(), const Player *player = NULL);
     void reply();
     void adjustItems();
 

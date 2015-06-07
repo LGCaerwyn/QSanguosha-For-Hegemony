@@ -1,5 +1,5 @@
 --[[********************************************************************
-	Copyright (c) 2013-2014 - QSanguosha-Rara
+	Copyright (c) 2013-2015 Mogara
 
   This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
   See the LICENSE file for more details.
 
-  QSanguosha-Rara
+  Mogara
 *********************************************************************]]
 
 sgs.ai_skill_invoke.jianxiong = function(self, data)
@@ -142,12 +142,8 @@ sgs.ai_skill_cardask["@guicai-card"] = function(self, data)
 	if not (self:willShowForAttack() or self:willShowForDefence() ) then return "." end
 	local judge = data:toJudge()
 	local cards = sgs.QList2Table(self.player:getHandcards())
-	for _,pile in sgs.list(self.player:getPileNames())do
-		if pile:startsWith("&") or pile == "wooden_ox" then
-			for _, id in sgs.qlist(self.player:getPile(pile)) do
-				table.insert(cards, 1, sgs.Sanguosha:getCard(id))
-			end
-		end
+	for _, id in sgs.qlist(self.player:getHandPile()) do
+		table.insert(cards, 1, sgs.Sanguosha:getCard(id))
 	end
 	if judge.reason == "tieqi" then
 		local target
@@ -410,22 +406,22 @@ function sgs.ai_cardneed.luoyi(to, card, self)
 end
 
 sgs.luoyi_keep_value = {
-	Peach 			= 6,
-	Analeptic 		= 5.8,
-	Jink 			= 5.2,
-	Duel			= 5.5,
-	FireSlash 		= 5.6,
-	Slash 			= 5.4,
-	ThunderSlash 	= 5.5,
-	Axe				= 5,
-	Blade 			= 4.9,
-	Spear 			= 4.9,
-	Fan				= 4.8,
-	KylinBow		= 4.7,
-	Halberd			= 4.6,
-	MoonSpear		= 4.5,
+	Peach           = 6,
+	Analeptic       = 5.8,
+	Jink            = 5.2,
+	Duel            = 5.5,
+	FireSlash       = 5.6,
+	Slash           = 5.4,
+	ThunderSlash    = 5.5,
+	Axe             = 5,
+	Blade           = 4.9,
+	Spear           = 4.9,
+	Fan             = 4.8,
+	KylinBow        = 4.7,
+	Halberd         = 4.6,
+	MoonSpear       = 4.5,
 	SPMoonSpear = 4.5,
-	DefensiveHorse 	= 4
+	DefensiveHorse  = 4
 }
 
 
@@ -498,19 +494,11 @@ sgs.ai_need_damaged.yiji = function (self, attacker, player)
 
 	return player:getHp() > 2 and sgs.turncount > 2 and #self.friends > 1
 end
-local isInPile = function(player,id)
-	for _,pile in sgs.list(player:getPileNames())do
-		if pile:startsWith("&") or pile == "wooden_ox" then
-			if player:getPile(pile):contains(id) then return true end
-		end
-	end
-	return false
-end
 sgs.ai_view_as.qingguo = function(card, player, card_place)
 	local suit = card:getSuitString()
 	local number = card:getNumberString()
 	local card_id = card:getEffectiveId()
-	if card:isBlack() and (card_place == sgs.Player_PlaceHand or isInPile(player,card_id)) then
+	if card:isBlack() and (card_place == sgs.Player_PlaceHand or player:getHandPile():contains(card_id)) then
 		return ("jink:qingguo[%s:%s]=%d&qingguo"):format(suit, number, card_id)
 	end
 end
@@ -969,12 +957,8 @@ duanliang_skill.getTurnUseCard = function(self)
 
 	local cards = self.player:getCards("he")
 	cards = sgs.QList2Table(cards)
-	for _,pile in sgs.list(self.player:getPileNames())do
-		if pile:startsWith("&") or pile == "wooden_ox" then
-			for _, id in sgs.qlist(self.player:getPile(pile)) do
-				table.insert(cards, sgs.Sanguosha:getCard(id))
-			end
-		end
+	for _, id in sgs.qlist(self.player:getHandPile()) do
+		table.insert(cards, sgs.Sanguosha:getCard(id))
 	end
 	local card
 
@@ -1204,6 +1188,7 @@ sgs.ai_skill_invoke.xingshang = true
 function SmartAI:toTurnOver(player, n, reason) -- @todo: param of toTurnOver
 	if not player then global_room:writeToConsole(debug.traceback()) return end
 	n = n or 0
+	if not player:faceUp() then return false end
 	if reason and reason == "fangzhu" and player:getHp() == 1 and sgs.ai_AOE_data then
 		local use = sgs.ai_AOE_data:toCardUse()
 		if use.to:contains(player) and self:aoeIsEffective(use.card, player)
@@ -1218,7 +1203,6 @@ function SmartAI:toTurnOver(player, n, reason) -- @todo: param of toTurnOver
 		return false end
 	end
 	if player:hasShownSkill("jushou") and player:getPhase() <= sgs.Player_Finish then return false end
-	if not player:faceUp() then return false end
 	return true
 end
 
@@ -1228,12 +1212,17 @@ sgs.ai_skill_playerchosen.fangzhu = function(self, targets)
 	local target = nil
 	local n = self.player:getLostHp()
 	for _, friend in ipairs(self.friends_noself) do
-		if not self:toTurnOver(friend, n, "fangzhu") then
-			target = friend
+		if not friend:faceUp() then
+				target = friend
 			break
 		end
+		if not target then
+			if not self:toTurnOver(friend, n, "fangzhu") then
+				target = friend
+				break
+			end
+		end
 	end
-
 	if not target then
 		if n >= 3 then
 			target = self:findPlayerToDraw(false, n)

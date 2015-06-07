@@ -1,5 +1,5 @@
 --[[********************************************************************
-	Copyright (c) 2013-2014 - QSanguosha-Rara
+	Copyright (c) 2013-2015 Mogara
 
   This file is part of QSanguosha-Hegemony.
 
@@ -15,8 +15,9 @@
 
   See the LICENSE file for more details.
 
-  QSanguosha-Rara
+  Mogara
 *********************************************************************]]
+
 sgs.ai_skill_invoke.xunxun = function(self, data)
 	if not (self:willShowForDefence() or self:willShowForAttack()) then
 		return false
@@ -31,7 +32,7 @@ function sgs.ai_skill_invoke.wangxi(self, data)
 		if (self.player:isFriendWith(target) or self:isFriend(target)) and not self:needKongcheng(target)then
 				return true
 		else
-			if	not ( target:getPhase() ~= sgs.Player_NotActive and (target:hasShownSkills(sgs.Active_cardneed_skill) or target:hasWeapon("Crossbow")) )
+			if  not ( target:getPhase() ~= sgs.Player_NotActive and (target:hasShownSkills(sgs.Active_cardneed_skill) or target:hasWeapon("Crossbow")) )
 				and not ( target:getPhase() == sgs.Player_NotActive and target:hasShownSkills(sgs.notActive_cardneed_skill) )
 				or self:needKongcheng(target) then
 				return true

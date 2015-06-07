@@ -1,5 +1,5 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Rara
+    Copyright (c) 2013-2015 - Mogara
 
     This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
     See the LICENSE file for more details.
 
-    QSanguosha-Rara
+    Mogara
     *********************************************************************/
 
 #ifndef _CHOOSE_OPTIONS_BOX_H
@@ -27,7 +27,8 @@ class Button;
 class QSanCommandProgressBar;
 class QGraphicsProxyWidget;
 
-class ChooseOptionsBox : public GraphicsBox {
+class ChooseOptionsBox : public GraphicsBox
+{
     Q_OBJECT
 
 public:
@@ -35,7 +36,10 @@ public:
 
     QRectF boundingRect() const;
 
-    inline void setSkillName(const QString &skillName) { this->skillName = skillName; }
+    inline void setSkillName(const QString &skillName)
+    {
+        this->skillName = skillName;
+    }
     void clear();
 
 public slots:

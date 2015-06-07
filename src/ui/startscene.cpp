@@ -1,5 +1,5 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Rara
+    Copyright (c) 2013-2015 - Mogara
 
     This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
     See the LICENSE file for more details.
 
-    QSanguosha-Rara
+    Mogara
     *********************************************************************/
 
 #include "startscene.h"
@@ -59,7 +59,7 @@ StartScene::StartScene(QObject *parent)
     QGraphicsSimpleTextItem *website_text = addSimpleText("http://qsanguosha.org", website_font);
     website_text->setBrush(Qt::white);
     website_text->setPos(Config.Rect.width() / 2 - website_text->boundingRect().width(),
-        Config.Rect.height() / 2 - website_text->boundingRect().height());*/
+    Config.Rect.height() / 2 - website_text->boundingRect().height());*/
     serverLog = NULL;
 
     setBackgroundBrush(QBrush(QPixmap(Config.BackgroundImage)));
@@ -67,7 +67,8 @@ StartScene::StartScene(QObject *parent)
     connect(this, &StartScene::sceneRectChanged, this, &StartScene::onSceneRectChanged);
 }
 
-void StartScene::addButton(QAction *action) {
+void StartScene::addButton(QAction *action)
+{
     Tile *button = new Tile(action->text());
     QString icon = action->objectName();
     icon.remove(0, 6);
@@ -90,7 +91,7 @@ void StartScene::addButton(QAction *action) {
         button->setPos(center_x + 12 + rect.width(), top_y + (n - 6) * (rect.height() + 8));
 #else
     center_x = Config.Rect.width() / 4;
-    top_y = - (2 * rect.height()) - (4 * 3);
+    top_y = -(2 * rect.height()) - (4 * 3);
     if (n < 4)
         button->setPos(center_x - rect.width() - 4, top_y + n * (rect.height() + 8));
     else
@@ -100,7 +101,8 @@ void StartScene::addButton(QAction *action) {
     buttons << button;
 }
 
-void StartScene::setServerLogBackground() {
+void StartScene::setServerLogBackground()
+{
     if (serverLog) {
         // make its background the same as background, looks transparent
         QPalette palette;
@@ -109,7 +111,8 @@ void StartScene::setServerLogBackground() {
     }
 }
 
-void StartScene::switchToServer(Server *server) {
+void StartScene::switchToServer(Server *server)
+{
 #ifdef AUDIO_SUPPORT
     Audio::quit();
 #endif
@@ -138,7 +141,7 @@ void StartScene::switchToServer(Server *server) {
     group->addAnimation(yScale);
     group->start(QAbstractAnimation::DeleteWhenStopped);
 
-    foreach (Tile *button, buttons)
+    foreach(Tile *button, buttons)
         button->hide();
 
     serverLog = new QTextEdit;
@@ -243,7 +246,22 @@ void StartScene::onSceneRectChanged(const QRectF &rect)
     connect(this, &StartScene::sceneRectChanged, this, &StartScene::onSceneRectChanged);
 }
 
-void StartScene::printServerInfo() {
+static bool isLanAddress(const QString &address)
+{
+    if (address.startsWith("192.168.") || address.startsWith("10."))
+        return true;
+    else if (address.startsWith("172.")) {
+        bool ok = false;
+        int n = address.split(".").value(1).toInt(&ok);
+        if (ok && (n >= 16 && n < 32))
+            return true;
+    }
+
+    return false;
+}
+
+void StartScene::printServerInfo()
+{
     QStringList items;
     QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
     foreach (const QHostAddress &address, addresses) {
@@ -255,7 +273,7 @@ void StartScene::printServerInfo() {
     items.sort();
 
     foreach (const QString &item, items) {
-        if (item.startsWith("192.168.") || item.startsWith("10."))
+        if (isLanAddress(item))
             serverLog->append(tr("Your LAN address: %1, this address is available only for hosts that in the same LAN").arg(item));
         else if (item == "127.0.0.1")
             serverLog->append(tr("Your loopback address %1, this address is available only for your host").arg(item));

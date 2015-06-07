@@ -1,5 +1,5 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Rara
+    Copyright (c) 2013-2015 - Mogara
 
     This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
     See the LICENSE file for more details.
 
-    QSanguosha-Rara
+    Mogara
     *********************************************************************/
 
 #ifndef BANIPDIALOG_H
@@ -27,7 +27,8 @@ class Server;
 class QListWidget;
 class ServerPlayer;
 
-class BanIpDialog : public FlatDialog {
+class BanIpDialog : public FlatDialog
+{
     Q_OBJECT
 
 public:

@@ -1,5 +1,5 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Rara
+    Copyright (c) 2013-2015 - Mogara
 
     This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
     See the LICENSE file for more details.
 
-    QSanguosha-Rara
+    Mogara
     *********************************************************************/
 
 #include "choosesuitbox.h"
@@ -42,9 +42,7 @@ ChooseSuitBox::ChooseSuitBox()
 
 QRectF ChooseSuitBox::boundingRect() const
 {
-    const int width = buttonWidth * suitNumber
-            + outerBlankWidth * 2
-            + interval * (suitNumber - 1);
+    const int width = buttonWidth * suitNumber + outerBlankWidth * 2 + interval * (suitNumber - 1);
 
     int height = topBlankWidth + buttonHeight + bottomBlankWidth;
 
@@ -109,13 +107,13 @@ void ChooseSuitBox::reply()
 
 void ChooseSuitBox::clear()
 {
-    if (progressBar != NULL){
+    if (progressBar != NULL) {
         progressBar->hide();
         progressBar->deleteLater();
         progressBar = NULL;
     }
 
-    foreach (Button *button, buttons)
+    foreach(Button *button, buttons)
         button->deleteLater();
 
     buttons.clear();

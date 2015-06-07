@@ -1,5 +1,5 @@
 /********************************************************************
-    Copyright (c) 2013-2014 - QSanguosha-Rara
+    Copyright (c) 2013-2015 - Mogara
 
     This file is part of QSanguosha-Hegemony.
 
@@ -15,7 +15,7 @@
 
     See the LICENSE file for more details.
 
-    QSanguosha-Rara
+    Mogara
     *********************************************************************/
 
 #include "settings.h"
@@ -57,7 +57,8 @@ Settings::Settings()
     connect(qApp, &QApplication::aboutToQuit, this, &Settings::deleteLater);
 }
 
-void Settings::init() {
+void Settings::init()
+{
     if (!qApp->arguments().contains("-server")) {
         QString font_path = value("DefaultFontPath", "font/simli.ttf").toString();
         int font_id = QFontDatabase::addApplicationFont(font_path);
