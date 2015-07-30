@@ -61,8 +61,10 @@ public:
     virtual TriggerList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
     virtual bool cost(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
     virtual bool effect(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
-    void onTurnBroken(const char *function_name,TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
+    void onTurnBroken(const char *function_name, TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
+    virtual void record(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
 
+    LuaFunction on_record;
     LuaFunction can_trigger;
     LuaFunction on_cost;
     LuaFunction on_effect;
@@ -94,8 +96,10 @@ public:
     virtual TriggerList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
     virtual bool cost(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
     virtual bool effect(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
-    void onTurnBroken(const char *function_name,TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
+    void onTurnBroken(const char *function_name, TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
+    virtual void record(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
 
+    LuaFunction on_record;
     LuaFunction can_trigger;
     LuaFunction on_cost;
     LuaFunction on_effect;
@@ -109,7 +113,7 @@ class LuaViewAsSkill : public ViewAsSkill
     Q_OBJECT
 
 public:
-    LuaViewAsSkill(const char *name, const char *response_pattern, bool response_or_use, const char *expand_pile);
+    LuaViewAsSkill(const char *name, const char *response_pattern, bool response_or_use, const char *expand_pile, const char *limit_mark);
 
     inline void setGuhuoType(const char *type)
     {
@@ -253,6 +257,7 @@ public:
     virtual const Card *validate(CardUseStruct &cardUse) const;
     virtual const Card *validateInResponse(ServerPlayer *user) const;
     virtual void extraCost(Room *room, const CardUseStruct &card_use) const;
+    void onTurnBroken(const char *function_name, Room *room, QVariant &value) const;
 
     // the lua callbacks
     LuaFunction filter;
@@ -263,6 +268,7 @@ public:
     LuaFunction on_validate;
     LuaFunction on_validate_in_response;
     LuaFunction extra_cost;
+    LuaFunction on_turn_broken;
 };
 
 class LuaBasicCard : public BasicCard
@@ -381,14 +387,14 @@ public:
         else {
             if (Card::isKindOf(cardType)) return true;
             switch (subclass) {
-            case TypeSingleTargetTrick: return strcmp(cardType, "SingleTargetTrick") == 0; break;
-            case TypeDelayedTrick: return strcmp(cardType, "DelayedTrick") == 0; break;
-            case TypeAOE: return strcmp(cardType, "AOE") == 0; break;
-            case TypeGlobalEffect: return strcmp(cardType, "GlobalEffect") == 0; break;
-            case TypeNormal:
-            default:
-                return false;
-                break;
+                case TypeSingleTargetTrick: return strcmp(cardType, "SingleTargetTrick") == 0; break;
+                case TypeDelayedTrick: return strcmp(cardType, "DelayedTrick") == 0; break;
+                case TypeAOE: return strcmp(cardType, "AOE") == 0; break;
+                case TypeGlobalEffect: return strcmp(cardType, "GlobalEffect") == 0; break;
+                case TypeNormal:
+                default:
+                    return false;
+                    break;
             }
         }
     }

@@ -58,7 +58,7 @@
 --can_trigger:
 --lua函数，返回两个值，第一个用加号分割的技能名的字符串，第二个是技能的发动者（也就是源码里可以改变的那个ask_who）。
 --关于第一个返回值，这里的用途是这样，比如姜维的遗志，可以返回"guanxing"来使遗志发动观星而不用在遗志里把观星整个重写一遍。
---对于遗计等等技能，如果一次受到两点伤害，可以返回"yiji+yiji"，这样的话，可以发动两次遗计。神智忘隙节命同理。
+--对于遗计等等技能，如果一次受到两点伤害，可以返回"yiji,yiji"，这样的话，可以发动两次遗计。神智忘隙节命同理。
 --第二个返回值，用于技能触发者和技能发动者不一致的情况，比如类似骁果的技能
 --对于这种情况，用room:findPlayerBySkillName(self:objectName())找到技能的发动者，最后返回，类似这样：
 local yuejin = room:findPlayerBySkillName("xiaoguo")
@@ -170,7 +170,7 @@ LuaWangxi = sgs.CreateTriggerSkill{
 		for i = 1, damage.damage, 1 do
 			table.insert(trigger_list, self:objectName()) --在LUA表中插入一个元素
 		end
-		return table.concat(trigger_list, "+") --table.concat用于所有元素均为字符串的情况，返回字符串的连接，中间用由第二个参数指定的字符分割
+		return table.concat(trigger_list, ",") --table.concat用于所有元素均为字符串的情况，返回字符串的连接，中间用由第二个参数指定的字符分割
 	end ,
 	on_cost = function(self, event, room, player, data)
 		local damage = data:toDamage()

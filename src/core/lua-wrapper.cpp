@@ -22,7 +22,10 @@
 #include "util.h"
 
 LuaTriggerSkill::LuaTriggerSkill(const char *name, Frequency frequency, const char *limit_mark)
-    : TriggerSkill(name), can_trigger(0), on_cost(0), on_effect(0), priority(3), on_turn_broken(0)
+    : TriggerSkill(name), can_trigger(0), on_cost(0),
+    on_effect(0), priority(3),
+    on_turn_broken(0), on_record(0)
+
 {
     this->frequency = frequency;
     this->limit_mark = limit_mark;
@@ -56,7 +59,7 @@ int LuaBattleArraySkill::getPriority() const
     return priority;
 }
 
-LuaViewAsSkill::LuaViewAsSkill(const char *name, const char *response_pattern, bool response_or_use, const char *expand_pile)
+LuaViewAsSkill::LuaViewAsSkill(const char *name, const char *response_pattern, bool response_or_use, const char *expand_pile, const char *limit_mark)
     : ViewAsSkill(name), view_filter(0), view_as(0),
     enabled_at_play(0), enabled_at_response(0), enabled_at_nullification(0)
 {
@@ -64,6 +67,9 @@ LuaViewAsSkill::LuaViewAsSkill(const char *name, const char *response_pattern, b
     this->response_or_use = response_or_use;
     this->expand_pile = expand_pile;
     this->guhuo_type = "";
+    this->limit_mark = limit_mark;
+    if (!QString(limit_mark).isEmpty())
+        this->frequency = Skill::Limited;
 }
 
 QString LuaViewAsSkill::getGuhuoBox() const
@@ -102,7 +108,9 @@ static QHash<QString, QString> LuaSkillCardsSkillName;
 
 LuaSkillCard::LuaSkillCard(const char *name, const char *skillName)
     : SkillCard(), filter(0), feasible(0),
-    about_to_use(0), on_use(0), on_effect(0), on_validate(0), on_validate_in_response(0), extra_cost(0)
+    about_to_use(0), on_use(0), on_effect(0),
+    on_validate(0), on_validate_in_response(0),
+    extra_cost(0), on_turn_broken(0)
 {
     if (name) {
         LuaSkillCards.insert(name, this);

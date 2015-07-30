@@ -160,20 +160,16 @@ YijiViewAsSkill::YijiViewAsSkill()
     card->setParent(this);
 }
 
-void YijiViewAsSkill::setCards(const QString &card_str)
+void YijiViewAsSkill::initialize(const QString &card_str, int max_num, const QStringList &player_names, const QString &expand_pile)
 {
     QStringList cards = card_str.split("+");
     ids = StringList2IntList(cards);
-}
 
-void YijiViewAsSkill::setMaxNum(int max_num)
-{
     this->max_num = max_num;
-}
 
-void YijiViewAsSkill::setPlayerNames(const QStringList &names)
-{
-    card->setPlayerNames(names);
+    card->setPlayerNames(player_names);
+
+    this->expand_pile = expand_pile;
 }
 
 bool YijiViewAsSkill::viewFilter(const QList<const Card *> &selected, const Card *card) const
@@ -201,18 +197,27 @@ public:
         target_fixed = false;
     }
 
-    void setPlayerNames(const QStringList &names)
+    void setPlayerNames(const QStringList &names, int max, int min)
     {
         set = names.toSet();
+        this->max = max;
+        this->min = min;
     }
 
     virtual bool targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *) const
     {
-        return targets.isEmpty() && set.contains(to_select->objectName());
+        return targets.length() < max && set.contains(to_select->objectName());
+    }
+
+    virtual bool targetsFeasible(const QList<const Player *> &targets, const Player *) const
+    {
+        return targets.length() >= min && !targets.isEmpty();
     }
 
 private:
     QSet<QString> set;
+    int max;
+    int min;
 };
 
 ChoosePlayerSkill::ChoosePlayerSkill()
@@ -222,9 +227,9 @@ ChoosePlayerSkill::ChoosePlayerSkill()
     card->setParent(this);
 }
 
-void ChoosePlayerSkill::setPlayerNames(const QStringList &names)
+void ChoosePlayerSkill::setPlayerNames(const QStringList &names, int max, int min)
 {
-    card->setPlayerNames(names);
+    card->setPlayerNames(names, max, min);
 }
 
 const Card *ChoosePlayerSkill::viewAs() const
@@ -257,4 +262,39 @@ bool TransferSkill::isEnabledAtPlay(const Player *) const
 void TransferSkill::setToSelect(int toSelect)
 {
     _toSelect = toSelect;
+}
+
+//--------------------------------------------------
+ExchangeSkill::ExchangeSkill()
+    : ViewAsSkill("exchange"), card(new DummyCard), num(0), minnum(0)
+{
+    card->setParent(this);
+    pattern = ".|.|.|.";
+}
+
+void ExchangeSkill::initialize(int num, int minnum, const QString &expand_pile, const QString &pattern)
+{
+    this->num = num;
+    this->minnum = minnum;
+    this->expand_pile = expand_pile;
+    this->pattern = pattern;
+}
+
+bool ExchangeSkill::viewFilter(const QList<const Card *> &selected, const Card *card) const
+{
+    if (selected.length() >= num)
+        return false;
+
+    return Sanguosha->matchExpPattern(pattern, Self, card);
+}
+
+const Card *ExchangeSkill::viewAs(const QList<const Card *> &cards) const
+{
+    if (cards.length() == 0) return NULL;
+    if (cards.length() >= minnum) {
+        card->clearSubcards();
+        card->addSubcards(cards);
+        return card;
+    } else
+        return NULL;
 }

@@ -22,7 +22,20 @@ sgs.ai_skill_invoke.xunxun = function(self, data)
 	if not (self:willShowForDefence() or self:willShowForAttack()) then
 		return false
 	end
+	if self.player:getTreasure() and self.player:getTreasure():isKindOf("JadeSeal") then return false end
 	return true
+end
+
+sgs.ai_skill_movecards.xunxun = function(self, upcards, downcards, min_num, max_num)
+	local upcards_copy = table.copyFrom(upcards)
+	local down = {}
+	local id1 = self:askForAG(upcards_copy,false,"xunxun")
+	down[1] = id1
+	table.removeOne(upcards_copy,id1)
+	local id2 = self:askForAG(upcards_copy,false,"xunxun")
+	down[2] = id2
+	table.removeOne(upcards_copy,id2)
+	return upcards_copy,down
 end
 
 function sgs.ai_skill_invoke.wangxi(self, data)

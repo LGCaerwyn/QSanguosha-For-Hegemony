@@ -818,7 +818,8 @@ sgs.ai_skill_invoke.lirang = function(self, data)
 	return #self.friends_noself > 0
 end
 
-sgs.ai_skill_askforyiji.lirang = function(self, card_ids)
+sgs.ai_skill_use["@@lirang"] = function(self, prompt)
+	local card_ids = self.player:getTag("lirang_forAI"):toString():split("+")
 	self:updatePlayers()
 	local cards = {}
 	for _, card_id in ipairs(card_ids) do
@@ -827,18 +828,42 @@ sgs.ai_skill_askforyiji.lirang = function(self, card_ids)
 	local id = card_ids[1]
 
 	local card, friend = self:getCardNeedPlayer(cards, self.friends_noself)
-	if card and friend then return friend, card:getId() end
+	if card and friend then return "@LirangCard=" .. id .. "->" .. friend:objectName() end
 	if #self.friends_noself > 0 then
 		self:sort(self.friends_noself, "handcard")
 		for _, afriend in ipairs(self.friends_noself) do
 			if not self:needKongcheng(afriend, true) then
-				return afriend, id
+				return "@LirangCard=" .. id .. "->" .. afriend:objectName()
 			end
 		end
 		self:sort(self.friends_noself, "defense")
-		return self.friends_noself[1], id
+		return "@LirangCard=" .. id .. "->" .. self.friends_noself[1]:objectName()
 	end
-	return nil, -1
+	return "."
+end
+
+sgs.ai_skill_use["@@lirang!"] = function(self, prompt)
+	local card_ids = self.player:getTag("lirang_forAI"):toString():split("+")
+	self:updatePlayers()
+	local cards = {}
+	for _, card_id in ipairs(card_ids) do
+		table.insert(cards, sgs.Sanguosha:getCard(card_id))
+	end
+	local id = card_ids[1]
+
+	local card, friend = self:getCardNeedPlayer(cards, self.friends_noself)
+	if card and friend then return "@LirangCard=" .. id .. "->" .. friend:objectName() end
+	if #self.friends_noself > 0 then
+		self:sort(self.friends_noself, "handcard")
+		for _, afriend in ipairs(self.friends_noself) do
+			if not self:needKongcheng(afriend, true) then
+				return "@LirangCard=" .. id .. "->" .. afriend:objectName()
+			end
+		end
+		self:sort(self.friends_noself, "defense")
+		return "@LirangCard=" .. id .. "->" .. self.friends_noself[1]:objectName()
+	end
+	return "@LirangCard=" .. id .. "->" .. self.player:getAliveSiblings():first():objectName()
 end
 
 sgs.ai_skill_playerchosen.shuangren = function(self, targets)
@@ -851,7 +876,11 @@ sgs.ai_skill_playerchosen.shuangren = function(self, targets)
 	local max_point = max_card:getNumber()
 
 	local slash = sgs.cloneCard("slash")
-	local dummy_use = { isDummy = true, to = sgs.SPlayerList() }
+	local dummy_use = { isDummy = true, to = sgs.SPlayerList(), current_targets = {}}
+	local zhangjiao = sgs.findPlayerByShownSkillName("leiji")
+	if zhangjiao and self:isFriend(zhangjiao) then
+		table.insert(dummy_use.current_targets, zhangjiao:objectName())
+	end
 	self.player:setFlags("slashNoDistanceLimit")
 	self:useBasicCard(slash, dummy_use)
 	self.player:setFlags("-slashNoDistanceLimit")
