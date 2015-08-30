@@ -341,7 +341,7 @@ function SmartAI:slashIsEffective(slash, to, from, ignore_armor)
 			return false
 		end
 	end
-
+	
 	if not ignore_armor and  to:hasArmorEffect("IronArmor") and slash:isKindOf("FireSlash") then return false end
 
 	if not (ignore_armor or IgnoreArmor(from, to)) then
@@ -745,6 +745,7 @@ sgs.ai_skill_cardask["slash-jink"] = function(self, data, pattern, target)
 		slash = sgs.cloneCard("slash")
 	end
 	local cards = sgs.QList2Table(self.player:getHandcards())
+	if not self:slashIsEffective(slash,self.player,target) then return "." end
 	if sgs.ai_skill_cardask.nullfilter(self, data, pattern, target) then return "." end
 	if not target then return getJink() end
 	if not self:hasHeavySlashDamage(target, slash, self.player) and self:getDamagedEffects(self.player, target, slash) then return "." end
@@ -1052,6 +1053,7 @@ sgs.ai_skill_invoke.IceSword = function(self, data)
 		elseif target:getLostHp() < 1 then return false end
 		return true
 	else
+		if target:hasArmorEffect("PeaceSpell") and damage.nature ~= sgs.DamageStruct_Normal then return true end
 		if self:isWeak(target) then return false end
 		if damage.damage > 1 or self:hasHeavySlashDamage(self.player, damage.card, target) then return false end
 		if target:hasShownSkill("lirang") and #self:getFriendsNoself(target) > 0 then return false end

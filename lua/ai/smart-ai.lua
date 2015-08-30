@@ -1278,7 +1278,7 @@ function SmartAI:getDynamicUsePriority(card)
 
 	local value = self:getUsePriority(card) or 0
 	if card:getTypeId() == sgs.Card_TypeEquip then
-		if self.player:hasSkills("xiaoji+qixi") and self:getSameEquip(card) then return 3 end
+		if self.player:hasSkills("xiaoji+qixi") and self:getSameEquip(card) and self:getSameEquip(card):isBlack() then return 3.3 end
 		if self.player:hasSkills(sgs.lose_equip_skill) then value = value + 12 end
 		if card:isKindOf("Weapon") and self.player:getPhase() == sgs.Player_Play and #self.enemies > 0 then
 			self:sort(self.enemies)
@@ -2561,6 +2561,26 @@ function SmartAI:askForCardChosen(who, flags, reason, method, disable_list)
 			end
 		end
 	else
+		if reason == "hengzheng" and self.player:getHp() <= 2 then
+			local hasweapon = self.player:getWeapon()
+			local hasarmor = self.player:getArmor()
+			local hasoffhorse = self.player:getOffensiveHorse()
+			local hasdefhorse = self.player:getDefensiveHorse()
+			for _, id in sgs.qlist(self.player:getHandPile()) do
+				if sgs.Sanguosha:getCard(id):isKindOf("Weapon") then hasweapon = true end
+				if sgs.Sanguosha:getCard(id):isKindOf("Armor") then hasarmor = true end
+				if sgs.Sanguosha:getCard(id):isKindOf("OffensiveHorse") then hasoffhorse = true end
+				if sgs.Sanguosha:getCard(id):isKindOf("DefensiveHorse") then hasdefhorse = true end
+			end
+			if hasweapon and who:getWeapon() then table.insert(disable_list, who:getWeapon():getEffectiveId()) end
+			if hasarmor and who:getgetArmor() then table.insert(disable_list, who:getArmor():getEffectiveId()) end
+			if hasoffhorse and who:getOffensiveHorse() then table.insert(disable_list, who:getOffensiveHorse():getEffectiveId()) end
+			if hasdefhorse and who:getDefensiveHorse() then table.insert(disable_list, who:getDefensiveHorse():getEffectiveId()) end
+			if #disable_list >= who:getEquips():length() + who:getHandcardNum() then
+				disable_list = {}
+			end
+		end
+
 		local dangerous = self:getDangerousCard(who)
 		if flags:match("e") and dangerous and (not isDiscard or self.player:canDiscard(who, dangerous)) and not table.contains(disable_list, dangerous) then return dangerous end
 		if flags:match("e") and who:getTreasure() and (who:getPile("wooden_ox"):length() > 1 or who:hasTreasure("JadeSeal")) and (not isDiscard or self.player:canDiscard(who, who:getTreasure():getId()))
@@ -2752,6 +2772,7 @@ function SmartAI:askForUseCard(pattern, prompt, method)
 		local dummy_use = {isDummy = true}
 		if not c:targetFixed() then dummy_use.to = sgs.SPlayerList() end
 		self:useCardByClassName(c,dummy_use)
+		if dummy_use.card == nil then return "." end
 		local str = c:toString()
 		if not c:targetFixed() then 
 			local target_objectname = {}
@@ -3528,10 +3549,11 @@ function SmartAI:getRetrialCardId(cards, judge, self_card)
 	local other_suit, hasSpade = {}
 	for _, card in ipairs(cards) do
 		local card_x = sgs.Sanguosha:getEngineCard(card:getEffectiveId())
+		local is_peach = self:isFriend(who) and who:hasSkill("tiandu") or isCard("Peach", card_x, self.player)  
 		if who:hasShownSkill("hongyan") and card_x:getSuit() == sgs.Card_Spade then
 			card_x = sgs.cloneCard(card_x:objectName(), sgs.Card_Heart, card:getNumber())
 		end
-		if reason == "beige" and not isCard("Peach", card_x, self.player) then
+		if reason == "beige" and not is_peach then
 			local damage = self.room:getTag("CurrentDamageStruct"):toDamage()
 			if damage.from then
 				if self:isFriend(damage.from) then
@@ -3558,10 +3580,10 @@ function SmartAI:getRetrialCardId(cards, judge, self_card)
 				end
 			end
 		elseif self:isFriend(who) and judge:isGood(card_x)
-				and not (self_card and (self:getFinalRetrial() == 2 or self:dontRespondPeachInJudge(judge)) and isCard("Peach", card_x, self.player)) then
+				and not (self_card) and (self:getFinalRetrial() == 2 or self:dontRespondPeachInJudge(judge)) and is_peach then
 			table.insert(can_use, card)
 		elseif self:isEnemy(who) and not judge:isGood(card_x)
-				and not (self_card and (self:getFinalRetrial() == 2 or self:dontRespondPeachInJudge(judge)) and isCard("Peach", card_x, self.player)) then
+				and not (self_card) and (self:getFinalRetrial() == 2 or self:dontRespondPeachInJudge(judge)) and is_peach then
 			table.insert(can_use, card)
 		end
 	end

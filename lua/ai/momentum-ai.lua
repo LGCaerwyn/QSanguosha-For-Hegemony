@@ -45,6 +45,7 @@ function sgs.ai_skill_invoke.wangxi(self, data)
 		if (self.player:isFriendWith(target) or self:isFriend(target)) and not self:needKongcheng(target)then
 				return true
 		else
+			if self.player:hasShownSkill("fankui") and target:isNude() then return true end
 			if  not ( target:getPhase() ~= sgs.Player_NotActive and (target:hasShownSkills(sgs.Active_cardneed_skill) or target:hasWeapon("Crossbow")) )
 				and not ( target:getPhase() == sgs.Player_NotActive and target:hasShownSkills(sgs.notActive_cardneed_skill) )
 				or self:needKongcheng(target) then
@@ -509,9 +510,10 @@ sgs.ai_skill_exchange["hongfa2"] = function(self,pattern,max_num,min_num,expand_
 end
 
 sgs.ai_slash_prohibit.PeaceSpell = function(self, from, enemy, card)
-	if enemy:hasArmorEffect("PeaceSpell") and card:isKindOf("NatureSlash") and not IgnoreArmor(from, enemy) then return true end
+	if enemy:hasArmorEffect("PeaceSpell") and card:isKindOf("NatureSlash") and not IgnoreArmor(from, enemy) and not from:hasWeapon("IceSword") then return true end
 	return
 end
+
 function sgs.ai_armor_value.PeaceSpell(player, self)
 	if player:hasShownSkills("hongfa+wendao") then return 1000 end
 	if getCardsNum("Peach", player, player) + getCardsNum("Analeptic", player, player) == 0 and player:getHp() == 1 then
