@@ -384,7 +384,21 @@ void PlayerCardContainer::updatePile(const QString &pile_name)
     QString treasure_name;
     if (player->getTreasure()) treasure_name = player->getTreasure()->objectName();
 
-    const QList<int> &pile = player->getPile(pile_name);
+    QList<int> pile;
+    if (pile_name == "huashencard") {
+        int n = player->tag["Huashens"].toStringList().length();
+        if (n == 0) return;
+        for (int i = 0; i < n; i ++) {
+            pile.append(i + 1);
+        }
+    } else {
+        pile = player->getPile(pile_name);
+    }
+
+    QString shownpilename = RoomSceneInstance->getCurrentShownPileName();
+    if (!shownpilename.isEmpty() && shownpilename == pile_name)
+        hidePile();
+
     if (pile.size() == 0) {
         if (_m_privatePiles.contains(pile_name)) {
             delete _m_privatePiles[pile_name];
@@ -414,8 +428,11 @@ void PlayerCardContainer::updatePile(const QString &pile_name)
         if (pile.length() > 0)
             text.append(QString("(%1)").arg(pile.length()));
         button->setText(text);
-        disconnect(button, &QPushButton::clicked, this, &PlayerCardContainer::showPile);
-        connect(button, &QPushButton::clicked, this, &PlayerCardContainer::showPile);
+        disconnect(button, &QPushButton::pressed, this, &PlayerCardContainer::showPile);
+        connect(button, &QPushButton::pressed, this, &PlayerCardContainer::showPile);
+
+        disconnect(button, &QPushButton::released, this, &PlayerCardContainer::hidePile);
+        connect(button, &QPushButton::released, this, &PlayerCardContainer::hidePile);
     }
 
     QPoint start = _m_layout->m_privatePileStartPos;
@@ -443,9 +460,15 @@ void PlayerCardContainer::showPile()
         const ClientPlayer *player = getPlayer();
         if (!player) return;
         QList<int> card_ids = player->getPile(button->objectName());
+        if (button->objectName() == "huashencard") RoomSceneInstance->showPile(card_ids, button->objectName(), player);
         if (card_ids.isEmpty() || card_ids.contains(-1)) return;
-        RoomSceneInstance->doGongxin(card_ids, false, QList<int>());
+        RoomSceneInstance->showPile(card_ids, button->objectName(), player);
     }
+}
+
+void PlayerCardContainer::hidePile()
+{
+    RoomSceneInstance->hidePile();
 }
 
 void PlayerCardContainer::updateDrankState()
@@ -550,6 +573,10 @@ void PlayerCardContainer::repaintAll()
     _updateDeathIcon();
     _updateEquips();
     updateDelayedTricks();
+
+    if (_m_huashenAnimation != NULL)
+        _m_huashenAnimation->start();
+
     //we have two avatar areas now...
     _paintPixmap(_m_faceTurnedIcon, _m_layout->m_avatarArea, QSanRoomSkin::S_SKIN_KEY_FACETURNEDMASK,
         _getAvatarParent());
@@ -784,6 +811,64 @@ QList<CardItem *> PlayerCardContainer::removeEquips(const QList<int> &cardIds)
     return result;
 }
 
+void PlayerCardContainer::startHuaShen(QStringList generalName)
+{
+    if (m_player == NULL)
+        return;
+
+    _m_huashenGeneralNames = generalName;
+    Q_ASSERT(m_player->hasSkill("huashen"));
+
+    bool second_zuoci = m_player->getGeneralName() != "zuoci" && m_player->getGeneral2Name() == "zuoci";
+    int avatarSize = _m_layout->m_smallAvatarSize;
+    QPixmap pixmap1 = G_ROOM_SKIN.getGeneralPixmap(generalName.first(), (QSanRoomSkin::GeneralIconSize)avatarSize);
+    QPixmap pixmap2 = G_ROOM_SKIN.getGeneralPixmap(generalName.last(), (QSanRoomSkin::GeneralIconSize)avatarSize);
+
+    QRect animRect = _m_layout->m_secondaryAvatarArea;
+    int width = animRect.width();
+    int height = animRect.height();
+    if (pixmap1.size() != animRect.size())
+        pixmap1 = pixmap1.scaled(animRect.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    QPixmap pixmap3 = pixmap1.copy(width/4, 0, width/2, height);
+    if (pixmap2.size() != animRect.size())
+        pixmap2 = pixmap2.scaled(animRect.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    QPixmap pixmap4 = pixmap2.copy(width/4, 0, width/2, height);
+    QPainter paint(&pixmap1);
+    paint.drawPixmap(0, 0, pixmap3.width(), pixmap3.height(), pixmap3);
+    paint.drawPixmap(pixmap3.width(), 0, pixmap3.width(), pixmap3.height(), pixmap4);
+
+    stopHuaShen();
+    _m_huashenAnimation = G_ROOM_SKIN.createHuaShenAnimation(pixmap1,
+            second_zuoci ? animRect.topLeft() : _m_layout->m_avatarArea.topLeft(), _getAvatarParent(), _m_huashenItem);
+    _m_huashenAnimation->start();
+    /*
+    _paintPixmap(_m_extraSkillBg, _m_layout->m_extraSkillArea, QSanRoomSkin::S_SKIN_KEY_EXTRA_SKILL_BG, _getAvatarParent());
+    if (!skillName.isEmpty())
+        _m_extraSkillBg->show();
+    _m_layout->m_extraSkillFont.paintText(_m_extraSkillText, _m_layout->m_extraSkillTextArea, Qt::AlignCenter,
+        Sanguosha->translate(skillName).left(2));
+    if (!skillName.isEmpty()) {
+        _m_extraSkillText->show();
+        _m_extraSkillBg->setToolTip(Sanguosha->getSkill(skillName)->getDescription());
+    }
+    */
+    _adjustComponentZValues();
+
+}
+
+void PlayerCardContainer::stopHuaShen()
+{
+    if (_m_huashenAnimation != NULL) {
+        _m_huashenAnimation->stop();
+        _m_huashenAnimation->deleteLater();
+        delete _m_huashenItem;
+        _m_huashenAnimation = NULL;
+        _m_huashenItem = NULL;
+        _clearPixmap(_m_extraSkillBg);
+        _clearPixmap(_m_extraSkillText);
+    }
+}
+
 void PlayerCardContainer::updateAvatarTooltip()
 {
     if (m_player) {
@@ -827,6 +912,8 @@ PlayerCardContainer::PlayerCardContainer()
         _m_equipAnim[i] = NULL;
         _m_equipLabel[i] = NULL;
     }
+    _m_huashenItem = NULL;
+    _m_huashenAnimation = NULL;
     _m_extraSkillBg = NULL;
     _m_extraSkillText = NULL;
 
@@ -836,6 +923,7 @@ PlayerCardContainer::PlayerCardContainer()
     _m_votesItem = NULL;
     _m_distanceItem = NULL;
     _m_seatItem = NULL;
+    _m_liegongItem = NULL;
     _m_groupMain = new QGraphicsPixmapItem(this);
     _m_groupMain->setFlag(ItemHasNoContents);
     _m_groupMain->setPos(0, 0);
@@ -887,6 +975,7 @@ void PlayerCardContainer::_adjustComponentZValues()
 
     _layUnder(_m_floatingArea);
     _layUnder(_m_distanceItem);
+    _layUnder(_m_liegongItem);
     _layUnder(_m_votesItem);
     foreach(QGraphicsItem *pile, _m_privatePiles)
         _layUnder(pile);
@@ -921,6 +1010,7 @@ void PlayerCardContainer::_adjustComponentZValues()
     _layUnder(_m_faceTurnedIcon);
     _layUnder(_m_duanchangMask2);
     _layUnder(_m_duanchangMask);
+    _layUnder(_m_huashenItem);
     _layUnder(_m_secondaryAvatarArea);
     _layUnder(_m_avatarArea);
     _layUnder(_m_circleItem);
@@ -1082,6 +1172,21 @@ void PlayerCardContainer::hideDistance()
         _m_distanceItem->hide();
 }
 
+void PlayerCardContainer::showLiegong()
+{
+    _paintPixmap(_m_liegongItem, _m_layout->m_saveMeIconRegion,
+        _getPixmap(QSanRoomSkin::S_SKIN_KEY_VOTES_NUMBER, "lie"),
+        _getAvatarParent());
+    if (!_m_liegongItem->isVisible())
+       _m_liegongItem->show();
+}
+
+void PlayerCardContainer::hideLiegong()
+{
+    if (_m_liegongItem && _m_liegongItem->isVisible())
+        _m_liegongItem->hide();
+}
+
 void PlayerCardContainer::onRemovedChanged()
 {
     QAbstractAnimation::Direction direction = m_player->isRemoved() ? QAbstractAnimation::Forward
@@ -1112,9 +1217,14 @@ void PlayerCardContainer::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     QGraphicsItem *item1 = getMouseClickReceiver();
     QGraphicsItem *item2 = getMouseClickReceiver2();
     if (_isSelected(item1) || _isSelected(item2)) {
-        if (event->button() == Qt::RightButton)
+        if (event->button() == Qt::RightButton && ClientInstance->getStatus() != Client::GlobalCardChosen)
             setSelected(false);
         else if (event->button() == Qt::LeftButton) {
+            if (ClientInstance->getStatus() == Client::GlobalCardChosen) {
+                setSelected(true);
+                emit global_selected_changed(getPlayer());
+                return;
+            }
             _m_votesGot++;
             setSelected(_m_votesGot <= _m_maxVotes);
             if (_m_votesGot > 1) emit selected_changed();
@@ -1153,7 +1263,8 @@ QVariant PlayerCardContainer::itemChange(GraphicsItemChange change, const QVaria
             }
         }
         updateVotes();
-        emit selected_changed();
+        if (ClientInstance->getStatus() != Client::GlobalCardChosen)
+            emit selected_changed();
     } else if (change == ItemEnabledHasChanged) {
         _m_votesGot = 0;
         emit enable_changed();

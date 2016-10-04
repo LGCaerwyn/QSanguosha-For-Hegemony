@@ -112,6 +112,8 @@ public:
     virtual void killPlayer();
     virtual void revivePlayer();
     virtual QGraphicsItem *getMouseClickReceiver() = 0;
+    virtual void startHuaShen(QStringList generalName);
+    virtual void stopHuaShen();
     inline virtual QGraphicsItem *getMouseClickReceiver2()
     {
         return NULL;
@@ -161,9 +163,12 @@ public slots:
     void updateReformState();
     void showDistance();
     void hideDistance();
+    void showLiegong();
+    void hideLiegong();
     void onRemovedChanged();
     virtual void showSeat();
     virtual void showPile();
+    virtual void hidePile();
     virtual void refresh();
 
     QPixmap getHeadAvatarIcon(const QString &generalName);
@@ -303,6 +308,14 @@ protected:
     // The following stuffs for showing seat
     QGraphicsPixmapItem *_m_seatItem;
 
+    // The following stuffs for showing liegong
+    QGraphicsPixmapItem *_m_liegongItem;
+
+    // animations
+    QAbstractAnimation *_m_huashenAnimation;
+    QGraphicsItem *_m_huashenItem;
+    QStringList _m_huashenGeneralNames;
+
 protected slots:
     virtual void _onEquipSelectChanged();
 
@@ -314,6 +327,7 @@ private:
 signals:
     void selected_changed();
     void enable_changed();
+    void global_selected_changed(const ClientPlayer *player, int id = -1);
 };
 
 #endif

@@ -25,8 +25,11 @@ class Button;
 
 #include "carditem.h"
 #include "genericcardcontainerui.h"
+#include "protocol.h"
 
 #include <QStack>
+
+class QSanCommandProgressBar;
 
 class CardContainer : public GenericCardContainer
 {
@@ -62,6 +65,7 @@ public:
 
 public slots:
     void fillCards(const QList<int> &card_ids = QList<int>(), const QList<int> &disabled_ids = QList<int>());
+    void fillGeneralCards(const QList<CardItem *> &card_items = QList<CardItem *>(), const QList<CardItem *> &disabled_item = QList<CardItem *>());
     void clear();
     void freezeCards(bool is_disable);
 
@@ -72,6 +76,8 @@ protected:
     int itemCount;
 
     static const int cardInterval = 3;
+    QGraphicsProxyWidget *progressBarItem;
+    QSanCommandProgressBar *progressBar;
 
 private:
     QList<CardItem *> items;

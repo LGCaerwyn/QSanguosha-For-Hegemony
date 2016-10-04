@@ -106,6 +106,7 @@ int Card::getNumber() const
             int num = 0;
             foreach (int id, subcards)
                 num += Sanguosha->getCard(id)->getNumber();
+            num = qMin(num, 13);
             return num;
         }
     } else
@@ -362,6 +363,16 @@ void Card::setSkillName(const QString &name)
     this->m_skillName = name;
 }
 
+void Card::setSkillPosition(const QString &position)
+{
+    this->m_skill_position = position;
+}
+
+QString Card::getSkillPosition() const
+{
+    return m_skill_position;
+}
+
 QString Card::getDescription(bool yellow) const
 {
     QString desc = Sanguosha->translate(":" + objectName());
@@ -470,7 +481,7 @@ bool Card::isVirtualCard() const
     return m_id < 0;
 }
 
-const Card *Card::Parse(const QString &str)
+const Card *Card::Parse(const QString &card_str)
 {
     static QMap<QString, Card::Suit> suit_map;
     if (suit_map.isEmpty()) {
@@ -483,6 +494,9 @@ const Card *Card::Parse(const QString &str)
         suit_map.insert("no_suit", Card::NoSuit);
     }
 
+    QStringList str_list = card_str.split("?");
+    QString str = str_list.first();
+    QString position = str_list.length() > 1 ? str_list.last() : QString();         //get skill postion info. by weirdouncle
     if (str.startsWith(QChar('@'))) {
         // skill card
         QRegExp pattern1("@(\\w+)=([^:]+)&(.*)(:.+)?");
@@ -567,6 +581,7 @@ const Card *Card::Parse(const QString &str)
             card->setUserString(user_string);
         }
         card->deleteLater();
+        card->setSkillPosition(position);
         return card;
     } else if (str.startsWith(QChar('$'))) {
         QString copy = str;
@@ -578,6 +593,7 @@ const Card *Card::Parse(const QString &str)
     } else if (str.startsWith(QChar('#'))) {
         LuaSkillCard *new_card = LuaSkillCard::Parse(str);
         new_card->deleteLater();
+        new_card->setSkillPosition(position);
         return new_card;
     } else if (str.contains(QChar('='))) {
         QRegExp pattern("(\\w+):(\\w*)\\[(\\w+):(.+)\\]=(.+)&(.*)");
@@ -623,6 +639,7 @@ const Card *Card::Parse(const QString &str)
         card->setSkillName(m_skillName);
         card->setShowSkill(show_skill);
         card->deleteLater();
+        card->setSkillPosition(position);
         return card;
     } else {
         bool ok;
@@ -709,6 +726,11 @@ void Card::onUse(Room *room, const CardUseStruct &use) const
     CardUseStruct card_use = use;
     ServerPlayer *player = card_use.from;
 
+    if (!card_use.card->getSkillPosition().isEmpty()) {                //for serveral purpose. by weidouncle
+        QStringList skill_positions = room->getTag(card_use.card->getSkillName(true) + player->objectName()).toStringList();
+        skill_positions.append(card_use.card->getSkillPosition());
+        room->setTag(card_use.card->getSkillName(true) + player->objectName(), skill_positions);
+    }
     room->sortByActionOrder(card_use.to);
 
     bool hidden = (card_use.card->getTypeId() == TypeSkill && !card_use.card->willThrow());
@@ -746,7 +768,10 @@ void Card::onUse(Room *room, const CardUseStruct &use) const
     card_use = data.value<CardUseStruct>();
 
     if (card_use.card->getTypeId() != TypeSkill) {
-        CardMoveReason reason(CardMoveReason::S_REASON_USE, player->objectName(), QString(), card_use.card->getSkillName(), QString());
+        QString general;
+        if (!card_use.card->getSkillPosition().isEmpty())
+            general = card_use.card->getSkillPosition() == "left" ? player->getActualGeneral1Name() : player->getActualGeneral2Name();
+        CardMoveReason reason(CardMoveReason::S_REASON_USE, player->objectName(), QString(), card_use.card->getSkillName(), general);
         if (card_use.to.size() == 1)
             reason.m_targetId = card_use.to.first()->objectName();
         foreach (int id, used_cards) {
@@ -755,18 +780,14 @@ void Card::onUse(Room *room, const CardUseStruct &use) const
         }
         room->moveCardsAtomic(moves, true);
         // show general
-        QString skill_name = card_use.card->showSkill();
-        if (!skill_name.isNull() && card_use.from->ownSkill(skill_name) && !card_use.from->hasShownSkill(skill_name))
-            card_use.from->showGeneral(card_use.from->inHeadSkills(skill_name));
+        player->showSkill(card_use.card->showSkill(), card_use.card->getSkillPosition());                           //new function by weidouncle
     } else {
         const SkillCard *skill_card = qobject_cast<const SkillCard *>(card_use.card);
         if (skill_card)
             skill_card->extraCost(room, card_use);
 
         // show general
-        QString skill_name = card_use.card->showSkill();
-        if (!skill_name.isNull() && card_use.from->ownSkill(skill_name) && !card_use.from->hasShownSkill(skill_name))
-            card_use.from->showGeneral(card_use.from->inHeadSkills(skill_name));
+        player->showSkill(card_use.card->showSkill(), card_use.card->getSkillPosition());                           //new function by weidouncle
 
         if (card_use.card->willThrow()) {
             QList<int> table_cardids = room->getCardIdsOnTable(card_use.card);
@@ -780,6 +801,13 @@ void Card::onUse(Room *room, const CardUseStruct &use) const
 
     thread->trigger(CardUsed, room, player, data);
     thread->trigger(CardFinished, room, player, data);
+    if (!card_use.card->getSkillPosition().isEmpty()) {
+        QStringList skill_positions = room->getTag(card_use.card->getSkillName(true) + player->objectName()).toStringList();        //remove this record when finish
+        if (!skill_positions.isEmpty()) {
+            skill_positions.removeLast();
+            room->setTag(card_use.card->getSkillName(true) + player->objectName(), skill_positions);
+        }
+    }
 }
 
 void Card::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &targets) const
@@ -983,7 +1011,10 @@ QString SkillCard::toString(bool hidden) const
 void SkillCard::extraCost(Room *room, const CardUseStruct &card_use) const
 {
     if (card_use.card->willThrow()) {
-        CardMoveReason reason(CardMoveReason::S_REASON_THROW, card_use.from->objectName(), QString(), card_use.card->getSkillName(), QString());
+        QString general;
+        if (!card_use.card->getSkillPosition().isEmpty())
+            general = card_use.card->getSkillPosition() == "left" ? card_use.from->getActualGeneral1Name() : card_use.from->getActualGeneral2Name();
+        CardMoveReason reason(CardMoveReason::S_REASON_THROW, card_use.from->objectName(), QString(), card_use.card->getSkillName(), general);
         room->moveCardTo(this, card_use.from, NULL, Player::PlaceTable, reason, true);
     }
 }
@@ -1036,8 +1067,26 @@ const Card *ArraySummonCard::validate(CardUseStruct &card_use) const
 {
     const BattleArraySkill *skill = qobject_cast<const BattleArraySkill *>(Sanguosha->getTriggerSkill(objectName()));
     if (skill) {
-        card_use.from->showGeneral(card_use.from->inHeadSkills(skill));
+        card_use.from->showSkill(skill->objectName(), card_use.card->getSkillPosition());                           //new function by weidouncle
         skill->summonFriends(card_use.from);
+    }
+    return NULL;
+}
+
+ShowDistanceCard::ShowDistanceCard()
+    : SkillCard()
+{
+    mute = true;
+    target_fixed = true;
+    handling_method = Card::MethodNone;
+}
+
+const Card *ShowDistanceCard::validate(CardUseStruct &card_use) const
+{
+    QString c = toString().split(":").last();   //damn it again!
+    const DistanceSkill *skill = qobject_cast<const DistanceSkill *>(Sanguosha->getSkill(c));
+    if (skill) {
+        card_use.from->showGeneral(card_use.from->inHeadSkills(skill));
     }
     return NULL;
 }
@@ -1050,7 +1099,7 @@ TransferCard::TransferCard()
 
 bool TransferCard::targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *Self) const
 {
-    if (!targets.isEmpty())
+    if (!targets.isEmpty() || to_select == Self)
         return false;
     if (!Self->hasShownOneGeneral())
         return !to_select->hasShownOneGeneral();

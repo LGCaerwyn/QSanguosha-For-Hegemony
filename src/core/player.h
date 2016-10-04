@@ -123,6 +123,7 @@ public:
     void setDisableShow(const QString &flags, const QString &reason);
     void removeDisableShow(const QString &reason);
     QStringList disableShow(bool head) const;
+    bool canShowGeneral(const QString &flags = QString()) const;
 
     QString getKingdom() const;
     void setKingdom(const QString &kingdom);
@@ -178,10 +179,10 @@ public:
     bool isLord() const;
 
     void acquireSkill(const QString &skill_name, bool head = true);
-    void detachSkill(const QString &skill_name);
+    void detachSkill(const QString &skill_name, bool head = true);
     void detachAllSkills();
     virtual void addSkill(const QString &skill_name, bool head_skill = true);
-    virtual void loseSkill(const QString &skill_name);
+    virtual void loseSkill(const QString &skill_name, bool head = true);
     bool hasSkill(const QString &skill_name, bool include_lose = false) const;
     bool hasSkill(const Skill *skill, bool include_lose = false) const;
     bool hasSkills(const QString &skill_name, bool include_lose = false) const;
@@ -224,6 +225,9 @@ public:
 
     bool canDiscard(const Player *to, const QString &flags) const;
     bool canDiscard(const Player *to, int card_id) const;
+    bool canGetCard(const Player *to, const QString &flags) const;
+    bool canGetCard(const Player *to, int card_id) const;
+    bool canTransform() const;
 
     void addMark(const QString &mark, int add_num = 1);
     void removeMark(const QString &mark, int remove_num = 1);
@@ -266,8 +270,10 @@ public:
     QSet<const TriggerSkill *> getTriggerSkills() const;
     QSet<const Skill *> getSkills(bool include_equip = false, bool visible_only = true) const;
     QList<const Skill *> getSkillList(bool include_equip = false, bool visible_only = true) const;
-    QList<const Skill *> getHeadSkillList(bool visible_only = true) const;
-    QList<const Skill *> getDeputySkillList(bool visible_only = true) const;
+    QList<const Skill *> getHeadSkillList(bool visible_only = true, bool include_acquired = false, bool include_equip = false) const;
+    QList<const Skill *> getDeputySkillList(bool visible_only = true, bool include_acquired = false, bool include_equip = false) const;
+    QList<const Skill *> getHeadActivedSkills() const;
+    QList<const Skill *> getDeputyActivedSkills() const;
     QSet<const Skill *> getVisibleSkills(bool include_equip = false) const;
     QList<const Skill *> getVisibleSkillList(bool include_equip = false) const;
     QSet<QString> getAcquiredSkills() const;
@@ -329,10 +335,10 @@ public:
     void setGeneral2Showed(bool showed);
     bool hasShownOneGeneral() const;
     bool hasShownAllGenerals() const;
-    void setSkillPreshowed(const QString &skill, bool preshowed = true);
+    void setSkillPreshowed(const QString &skill, bool preshowed = true, bool head = true);
     void setSkillsPreshowed(const QString &falgs = "hd", bool preshowed = true);
-    bool hasPreshowedSkill(const QString &name) const;
-    bool hasPreshowedSkill(const Skill *skill) const;
+    bool hasPreshowedSkill(const QString &name, bool head) const;
+    bool hasPreshowedSkill(const Skill *skill, bool head) const;
     bool isHidden(const bool &head_general) const;
 
     inline bool getScenarioRoleShown() const

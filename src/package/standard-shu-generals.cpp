@@ -303,13 +303,8 @@ public:
 
     virtual bool cost(TriggerEvent, Room *room, ServerPlayer *player, QVariant &, ServerPlayer *) const
     {
-        if (!player->hasSkill("guanxing")) {
+        if (player->inDeputySkills("yizhi") && !player->inHeadSkills(this)) {
             if (player->askForSkillInvoke(this)) {
-                LogMessage log;
-                log.type = "#InvokeSkill";
-                log.from = player;
-                log.arg = objectName();
-                room->sendLog(log);
                 room->broadcastSkillInvoke("yizhi", player);
                 player->showGeneral(false);
                 return true;
@@ -330,11 +325,11 @@ public:
             bool show1 = player->hasShownSkill(this);
             bool show2 = player->hasShownSkill("yizhi");
             QStringList choices;
-            if (!show1)
+            if (!show1 && player->canShowGeneral("h"))
                 choices << "show_head_general";
-            if (!show2)
+            if (!show2 && player->canShowGeneral("d"))
                 choices << "show_deputy_general";
-            if (choices.length() == 2)
+            if (choices.length() == 2 && player->canShowGeneral("hd"))
                 choices << "show_both_generals";
             if (choices.length() != 3)
                 choices << "cancel";
@@ -384,7 +379,7 @@ public:
 
     virtual int getGuanxingNum(ServerPlayer *zhuge) const
     {
-        if (zhuge->hasShownSkill(this) && zhuge->hasShownSkill("yizhi")) return 5;
+        if (zhuge->inHeadSkills(this) && zhuge->hasShownGeneral1() && zhuge->hasShownSkill("yizhi")) return 5;
         return qMin(5, zhuge->aliveCount());
     }
 };
@@ -539,6 +534,11 @@ public:
         }
     }
 };
+
+ShowMashu::ShowMashu()
+    : ShowDistanceCard()
+{
+}
 
 Mashu::Mashu(const QString &owner) : DistanceSkill("mashu_" + owner)
 {
@@ -772,19 +772,18 @@ public:
     }
 };
 
-
-class KuangguRecord : public TriggerSkill
+class Kuanggu : public TriggerSkill
 {
 public:
-    KuangguRecord() : TriggerSkill("#kuanggu-record")
+    Kuanggu() : TriggerSkill("kuanggu")
     {
-        events << PreDamageDone;
         frequency = Compulsory;
+        events << Damage << PreDamageDone;
     }
 
-    virtual QStringList triggerable(TriggerEvent, Room *, ServerPlayer *player, QVariant &data, ServerPlayer * &) const
+    virtual void record(TriggerEvent event, Room *, ServerPlayer *player, QVariant &data) const
     {
-        if (player != NULL) {
+        if (player != NULL && event == PreDamageDone) {
             DamageStruct damage = data.value<DamageStruct>();
             ServerPlayer *weiyan = damage.from;
             if (weiyan != NULL) {
@@ -794,23 +793,11 @@ public:
                     weiyan->tag.remove("InvokeKuanggu");
             }
         }
-
-        return QStringList();
-    }
-};
-
-class Kuanggu : public TriggerSkill
-{
-public:
-    Kuanggu() : TriggerSkill("kuanggu")
-    {
-        frequency = Compulsory;
-        events << Damage;
     }
 
-    virtual QStringList triggerable(TriggerEvent, Room *, ServerPlayer *player, QVariant &data, ServerPlayer * &) const
+    virtual QStringList triggerable(TriggerEvent event, Room *, ServerPlayer *player, QVariant &data, ServerPlayer * &) const
     {
-        if (TriggerSkill::triggerable(player)) {
+        if (TriggerSkill::triggerable(player) && event == Damage) {
             bool ok = false;
             int recorded_damage = player->tag["InvokeKuanggu"].toInt(&ok);
             if (ok && recorded_damage > 0 && player->isWounded()) {
@@ -946,6 +933,21 @@ public:
     }
 };
 
+class Bazhen : public ViewHasSkill
+{
+public:
+    Bazhen() : ViewHasSkill("bazhen")
+    {
+    }
+    virtual bool ViewHas(const Player *player, const QString &skill_name, const QString &flag) const
+    {
+        if (flag == "armor" && skill_name == "EightDiagram" && player->isAlive() && player->hasSkill(objectName()) && !player->getArmor())
+            return true;
+        return false;
+    }
+};
+
+/*
 class Bazhen : public TriggerSkill
 {
 public:
@@ -979,6 +981,7 @@ public:
         return false;
     }
 };
+*/
 
 class Kanpo : public OneCardViewAsSkill
 {
@@ -1011,14 +1014,6 @@ public:
                 return true;
         }
         return false;
-    }
-
-    virtual int getEffectIndex(const ServerPlayer *player, const Card *) const
-    {
-        if (!player->hasInnateSkill(objectName()) && player->hasSkill("tianfu"))
-            return (qrand() % 2 + 3);
-        else
-            return (qrand() % 2 + 1);
     }
 };
 
@@ -1294,8 +1289,8 @@ public:
             if (!success) return false;
 
             room->broadcastSkillInvoke(objectName(), 2, zhurong);
-            if (!target->isNude()) {
-                int card_id = room->askForCardChosen(zhurong, target, "he", objectName());
+            if (zhurong->canGetCard(target, "he")) {
+                int card_id = room->askForCardChosen(zhurong, target, "he", objectName(), false, Card::MethodGet);
                 CardMoveReason reason(CardMoveReason::S_REASON_EXTRACTION, zhurong->objectName());
                 room->obtainCard(zhurong, Sanguosha->getCard(card_id), reason, room->getCardPlace(card_id) != Player::PlaceHand);
             }
@@ -1614,8 +1609,6 @@ void StandardPackage::addShuGenerals()
 
     General *weiyan = new General(this, "weiyan", "shu"); // SHU 009
     weiyan->addSkill(new Kuanggu);
-    weiyan->addSkill(new KuangguRecord);
-    insertRelatedSkills("kuanggu", "#kuanggu-record");
 
     General *pangtong = new General(this, "pangtong", "shu", 3); // SHU 010
     pangtong->addSkill(new Lianhuan);
@@ -1651,4 +1644,5 @@ void StandardPackage::addShuGenerals()
 
     addMetaObject<RendeCard>();
     addMetaObject<FangquanCard>();
+    addMetaObject<ShowMashu>();
 }

@@ -59,9 +59,19 @@ int LuaBattleArraySkill::getPriority() const
     return priority;
 }
 
+LuaProhibitSkill::LuaProhibitSkill(const char *name)
+    : ProhibitSkill(name), is_prohibited(0)
+{
+}
+
+LuaFixCardSkill::LuaFixCardSkill(const char *name)
+    : FixCardSkill(name), is_cardfixed(0)
+{
+}
+
 LuaViewAsSkill::LuaViewAsSkill(const char *name, const char *response_pattern, bool response_or_use, const char *expand_pile, const char *limit_mark)
     : ViewAsSkill(name), view_filter(0), view_as(0),
-    enabled_at_play(0), enabled_at_response(0), enabled_at_nullification(0)
+    enabled_at_play(0), enabled_at_response(0), enabled_at_nullification(0), in_pile(0)
 {
     this->response_pattern = response_pattern;
     this->response_or_use = response_or_use;
@@ -75,6 +85,11 @@ LuaViewAsSkill::LuaViewAsSkill(const char *name, const char *response_pattern, b
 QString LuaViewAsSkill::getGuhuoBox() const
 {
     return guhuo_type;
+}
+
+LuaViewHasSkill::LuaViewHasSkill(const char *name)
+    : ViewHasSkill(name), is_viewhas(0)
+{
 }
 
 LuaFilterSkill::LuaFilterSkill(const char *name)

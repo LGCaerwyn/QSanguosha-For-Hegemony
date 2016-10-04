@@ -108,6 +108,30 @@ public:
     int priority;
 };
 
+class LuaProhibitSkill : public ProhibitSkill
+{
+    Q_OBJECT
+
+public:
+    LuaProhibitSkill(const char *name);
+
+    virtual bool isProhibited(const Player *from, const Player *to, const Card *card, const QList<const Player *> &others = QList<const Player *>()) const;
+
+    LuaFunction is_prohibited;
+};
+
+class LuaFixCardSkill : public FixCardSkill
+{
+    Q_OBJECT
+
+public:
+    LuaFixCardSkill(const char *name);
+
+    virtual bool isCardFixed(const Player *from, const Player *to, const QString &flags, Card::HandlingMethod method) const;
+
+    LuaFunction is_cardfixed;
+};
+
 class LuaViewAsSkill : public ViewAsSkill
 {
     Q_OBJECT
@@ -133,14 +157,31 @@ public:
     LuaFunction enabled_at_play;
     LuaFunction enabled_at_response;
     LuaFunction enabled_at_nullification;
+    LuaFunction in_pile;
 
     virtual bool isEnabledAtPlay(const Player *player) const;
     virtual bool isEnabledAtResponse(const Player *player, const QString &pattern) const;
     virtual bool isEnabledAtNullification(const ServerPlayer *player) const;
+    virtual QString getExpandPile() const;
 
 protected:
     QString guhuo_type;
 
+};
+
+class LuaViewHasSkill : public ViewHasSkill
+{
+    Q_OBJECT
+
+public:
+    LuaViewHasSkill(const char *name);
+
+    virtual bool ViewHas(const Player *player, const QString &skill_name, const QString &flag) const;
+    LuaFunction is_viewhas;
+    inline void setGlobal(bool global)
+    {
+        this->global = global;
+    }
 };
 
 class LuaFilterSkill : public FilterSkill
@@ -150,7 +191,7 @@ class LuaFilterSkill : public FilterSkill
 public:
     LuaFilterSkill(const char *name);
 
-    virtual bool viewFilter(const Card *to_select) const;
+    virtual bool viewFilter(const Card *to_select, ServerPlayer *player) const;
     virtual const Card *viewAs(const Card *originalCard) const;
 
     LuaFunction view_filter;

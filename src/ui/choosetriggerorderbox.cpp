@@ -46,26 +46,22 @@ const int ChooseTriggerOrderBox::bottom_blank_width = 25;
 const int ChooseTriggerOrderBox::interval = 15;
 const int ChooseTriggerOrderBox::m_leftBlankWidth = 37;
 
-static int getSkinId(const ClientPlayer *player, const QString &generalName)
+int TriggerOptionButton::getSkinId(const QString &playerName, const QString &generalName) const
 {
-    if (player->getGeneralName() == generalName)
+    const ClientPlayer *player = ClientInstance->getPlayer(playerName);
+    bool head = player->getGeneralName() == generalName;
+    if (!position.isEmpty())
+        head = position == "left";
+    if (head)
         return player->getHeadSkinId();
     else
         return player->getDeputySkinId();
-
-    return 0;
-}
-
-static int getSkinId(const QString &playerName, const QString &generalName)
-{
-    const ClientPlayer *player = ClientInstance->getPlayer(playerName);
-    return getSkinId(player, generalName);
 }
 
 TriggerOptionButton::TriggerOptionButton(QGraphicsObject *parent, const QString &player, const QString &skillStr, const int width)
     : QGraphicsObject(parent),
     m_skillStr(skillStr), m_text(displayedTextOf(skillStr)),
-    playerName(player), width(width)
+    playerName(player.split("?").first()), position(player.contains("?") ? player.split("?").last() : QString()), width(width)
 {
     QString realSkill = skillStr;
     if (realSkill.contains("'")) // "sgs1'songwei"
@@ -85,6 +81,8 @@ QString TriggerOptionButton::getGeneralNameBySkill() const
 {
     QString generalName;
     const ClientPlayer *player = ClientInstance->getPlayer(playerName);
+    if (!position.isEmpty())
+        return position == "left" ? player->getActualGeneral1Name() : player->getActualGeneral2Name();
     QString skillName = m_skillStr;
     if (m_skillStr.contains("*"))
         skillName = m_skillStr.split("*").first();
@@ -102,10 +100,12 @@ QString TriggerOptionButton::getGeneralNameBySkill() const
             realSkillName = realSkillName.split("'").last();
         else if (realSkillName.contains("->")) // "tieqi->sgs4&1"
             realSkillName = realSkillName.split("->").first();
-        if (player->inHeadSkills(Sanguosha->getMainSkill(realSkillName)))
+        if (player->inHeadSkills(realSkillName))
             generalName = player->getGeneralName();
-        else
+        else if (player->inDeputySkills(realSkillName))
             generalName = player->getGeneral2Name();
+        else
+            generalName = player->getGeneralName();
     }
     return generalName;
 }
@@ -127,8 +127,7 @@ void TriggerOptionButton::paint(QPainter *painter, const QStyleOptionGraphicsIte
     painter->drawRoundedRect(rect, 5, 5);
     painter->restore();
 
-    const QString generalName = getGeneralNameBySkill();
-
+    QString generalName = getGeneralNameBySkill();
     QPixmap pixmap = G_ROOM_SKIN.getGeneralPixmap(generalName, QSanRoomSkin::S_GENERAL_ICON_SIZE_TINY, getSkinId(playerName, generalName));
     pixmap = pixmap.scaledToHeight(optionButtonHeight, Qt::SmoothTransformation);
     QRect pixmapRect(QPoint(0, (rect.height() - pixmap.height()) / 2), pixmap.size());
@@ -192,6 +191,11 @@ QString TriggerOptionButton::displayedTextOf(const QString &str)
         text = tr("%1 (use upon %2)").arg(Sanguosha->translate(realSkill))
             .arg(Sanguosha->translate(targetName));
     }
+    if (skillName.contains("'")) {
+        QString realSkill = skillName.split("'").last();
+        text = tr("%1 (use upon %2)").arg(Sanguosha->translate(realSkill))
+                .arg(Sanguosha->translate(skillName.split("'").first()));
+    }
     if (time > 1)
         //text += " " + tr("*") + time;
         text += QString(" %1 %2").arg(tr("*")).arg(time);
@@ -245,7 +249,7 @@ GeneralButton::GeneralButton(QGraphicsObject *parent, const QString &general, co
 void GeneralButton::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *)
 {
     painter->setRenderHint(QPainter::HighQualityAntialiasing);
-    QPixmap generalImage = G_ROOM_SKIN.getGeneralPixmap(generalName, QSanRoomSkin::S_GENERAL_ICON_SIZE_LARGE, getSkinId(Self, generalName));
+    QPixmap generalImage = G_ROOM_SKIN.getGeneralPixmap(generalName, QSanRoomSkin::S_GENERAL_ICON_SIZE_LARGE, isHead ? Self->getHeadSkinId() : Self->getDeputySkinId());
     generalImage = generalImage.scaled(generalButtonSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     painter->setBrush(generalImage);
     painter->drawRoundedRect(boundingRect(), 5, 5, Qt::RelativeSize);
@@ -396,7 +400,7 @@ void ChooseTriggerOrderBox::chooseOption(const QString &reason, const QStringLis
         const int generalLeft = (boundingRect().width() / 2) - (interval / 2) - width;
         head->setPos(generalLeft, generalTop);
 
-        GeneralButton *deputy = new GeneralButton(this, Self->getGeneral2()->objectName(), true);
+        GeneralButton *deputy = new GeneralButton(this, Self->getGeneral2()->objectName(), false);
         deputy->setObjectName(QString("%1:%2").arg(Self->objectName()).arg(deputyString));
         generalButtons << deputy;
         deputy->setPos(head->pos().x() + head->boundingRect().width() + interval,
@@ -407,7 +411,7 @@ void ChooseTriggerOrderBox::chooseOption(const QString &reason, const QStringLis
     } else if (generalCount == 1) {
         const bool isHead = options.contains(QString("%1:%2").arg(Self->objectName()).arg(headString));
         const QString general = isHead ? Self->getGeneralName() : Self->getGeneral2Name();
-        GeneralButton *generalButton = new GeneralButton(this, general, true);
+        GeneralButton *generalButton = new GeneralButton(this, general, isHead);
         QString objectName = QString("%1:%2")
             .arg(Self->objectName())
             .arg(isHead ? headString : deputyString);

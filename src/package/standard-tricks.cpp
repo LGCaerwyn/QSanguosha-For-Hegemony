@@ -68,6 +68,7 @@ void AmazingGrace::use(Room *room, ServerPlayer *source, QList<ServerPlayer *> &
 void AmazingGrace::onEffect(const CardEffectStruct &effect) const
 {
     Room *room = effect.from->getRoom();
+    room->setEmotion(effect.from, "amazing_grace");
     QVariantList ag_list = room->getTag("AmazingGrace").toList();
     QList<int> card_ids;
     foreach(QVariant card_id, ag_list)
@@ -96,6 +97,7 @@ bool GodSalvation::isCancelable(const CardEffectStruct &effect) const
 void GodSalvation::onEffect(const CardEffectStruct &effect) const
 {
     Room *room = effect.to->getRoom();
+    room->setEmotion(effect.from, "god_salvation");
     if (!effect.to->isWounded());
     else {
         RecoverStruct recover;
@@ -114,6 +116,7 @@ SavageAssault::SavageAssault(Suit suit, int number)
 void SavageAssault::onEffect(const CardEffectStruct &effect) const
 {
     Room *room = effect.to->getRoom();
+    room->setEmotion(effect.from, "savage_assault");
     const Card *slash = room->askForCard(effect.to,
         "slash",
         "savage-assault-slash:" + effect.from->objectName(),
@@ -138,6 +141,7 @@ ArcheryAttack::ArcheryAttack(Card::Suit suit, int number)
 void ArcheryAttack::onEffect(const CardEffectStruct &effect) const
 {
     Room *room = effect.to->getRoom();
+    room->setEmotion(effect.from, "archery_attack");
     const Card *jink = room->askForCard(effect.to,
         "jink",
         "archery-attack-jink:" + effect.from->objectName(),
@@ -222,6 +226,7 @@ void Collateral::onEffect(const CardEffectStruct &effect) const
 {
     ServerPlayer *source = effect.from;
     Room *room = source->getRoom();
+    room->setEmotion(source, "collateral");
     ServerPlayer *killer = effect.to;
     ServerPlayer *victim = effect.to->tag["collateralVictim"].value<ServerPlayer *>();
     effect.to->tag.remove("collateralVictim");
@@ -306,6 +311,8 @@ bool ExNihilo::isAvailable(const Player *player) const
 
 void ExNihilo::onEffect(const CardEffectStruct &effect) const
 {
+    Room *room = effect.to->getRoom();
+    room->setEmotion(effect.to, "ex_nihilo");
     effect.to->drawCards(2);
 }
 
@@ -458,6 +465,9 @@ bool Snatch::targetFilter(const QList<const Player *> &targets, const Player *to
     if (distance == -1 || distance > distance_limit)
         return false;
 
+    if (!Self->canGetCard(to_select, "hej"))
+        return false;
+
     return true;
 }
 
@@ -469,7 +479,11 @@ void Snatch::onEffect(const CardEffectStruct &effect) const
         return;
 
     Room *room = effect.to->getRoom();
-    int card_id = room->askForCardChosen(effect.from, effect.to, "hej", objectName());
+    room->setEmotion(effect.to, "snatch");
+    if (!effect.from->canGetCard(effect.to, "hej"))
+        return;
+
+    int card_id = room->askForCardChosen(effect.from, effect.to, "hej", objectName(), false, Card::MethodGet);
     CardMoveReason reason(CardMoveReason::S_REASON_EXTRACTION, effect.from->objectName());
     room->obtainCard(effect.from, Sanguosha->getCard(card_id), reason, room->getCardPlace(card_id) != Player::PlaceHand);
 }
@@ -588,6 +602,9 @@ bool Dismantlement::targetFilter(const QList<const Player *> &targets, const Pla
     if (to_select == Self)
         return false;
 
+    if (!Self->canDiscard(to_select, "hej"))
+        return false;
+
     return true;
 }
 
@@ -597,6 +614,7 @@ void Dismantlement::onEffect(const CardEffectStruct &effect) const
         return;
 
     Room *room = effect.to->getRoom();
+    room->setEmotion(effect.from, "dismantlement");
     if (!effect.from->canDiscard(effect.to, "hej"))
         return;
 
@@ -942,7 +960,8 @@ bool KnownBoth::targetFilter(const QList<const Player *> &targets, const Player 
 
 bool KnownBoth::targetsFeasible(const QList<const Player *> &targets, const Player *Self) const
 {
-    bool rec = (Sanguosha->currentRoomState()->getCurrentCardUseReason() == CardUseStruct::CARD_USE_REASON_PLAY);
+    bool rec = (Sanguosha->currentRoomState()->getCurrentCardUseReason() == CardUseStruct::CARD_USE_REASON_PLAY) && can_recast
+        && !Self->isCardLimited(this, Card::MethodRecast);
     QList<int> sub;
     if (isVirtualCard())
         sub = subcards;
@@ -955,12 +974,12 @@ bool KnownBoth::targetsFeasible(const QList<const Player *> &targets, const Play
         }
     }
 
-    if (rec && Self->isCardLimited(this, Card::MethodUse))
-        return targets.length() == 0;
+    if (Self->isCardLimited(this, Card::MethodUse))
+        return rec && targets.length() == 0;
     int total_num = 1 + Sanguosha->correctCardTarget(TargetModSkill::ExtraTarget, Self, this);
     if (targets.length() > total_num)
         return false;
-    return rec || targets.length() > 0;
+    return targets.length() > 0 || rec;
 }
 
 void KnownBoth::onUse(Room *room, const CardUseStruct &card_use) const
@@ -1193,6 +1212,7 @@ void FireAttack::onEffect(const CardEffectStruct &effect) const
         return;
 
     const Card *card = room->askForCardShow(effect.to, effect.from, objectName());
+    room->setEmotion(effect.from, "fire_attack");
     room->showCard(effect.to, card->getEffectiveId());
 
     QString suit_str = card->getSuitString();

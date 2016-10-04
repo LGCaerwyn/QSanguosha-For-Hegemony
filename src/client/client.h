@@ -63,6 +63,7 @@ public:
         AskForCardChosen = 0x010011,
         AskForSuit = 0x010012,
         AskForMoveCards = 0x000013,
+        GlobalCardChosen = 0x000014,
 
         RespondingUse = 0x000101,
         RespondingForDiscard = 0x000201,
@@ -116,6 +117,7 @@ public:
     Replayer *getReplayer() const;
     QString getPlayerName(const QString &str);
     QString getSkillNameToInvoke() const;
+    QString getSkillToHighLight() const;
 
     QTextDocument *getLinesDoc() const;
     QTextDocument *getPromptDoc() const;
@@ -168,6 +170,7 @@ public:
     void updateCard(const QVariant &val);
     void mirrorGuanxingStep(const QVariant &args);
     void mirrorMoveCardsStep(const QVariant &args);
+    void setActualGeneral(const QVariant &args);
 
     void fillAG(const QVariant &cards_str);
     void takeAG(const QVariant &take_var);
@@ -187,6 +190,7 @@ public:
     void askForNullification(const QVariant &);
     void askForPindian(const QVariant &);
     void askForCardChosen(const QVariant &ask_str);
+    void globalCardChosen(const QVariant &ask_str);
     void askForPlayerChosen(const QVariant &players);
     void askForGeneral(const QVariant &);
     void askForYiji(const QVariant &);
@@ -215,6 +219,10 @@ public:
     inline virtual RoomState *getRoomState()
     {
         return &_m_roomState;
+    }
+    inline virtual bool *getRaceState()
+    {
+        return &_m_race;
     }
     inline virtual Card *getCard(int cardId) const
     {
@@ -257,25 +265,32 @@ public:
     QStringList players_to_choose;
     int choose_max_num;
     int choose_min_num;
+    int type;
+    bool handcard_visible;
+    QList<int> disabled_ids;
 
     int exchange_max;
     int exchange_min;
     QString exchange_pattern;
     QString exchange_expand_pile;
     QString exchange_reason;
+    bool _m_race = false;
+    QHash<QString, QList<int>> targets_cards;
+    QString text;
 
 public slots:
     void signup();
     void onPlayerChooseGeneral(const QString &_name);
     void onPlayerMakeChoice(const QString &choice);
     void onPlayerChooseCard(int index, int card_id = -2);
+    void onPlayerChooseCards(const QList<int> &ids = QList<int>());
     void onPlayerChooseAG(int card_id);
     void onPlayerChoosePlayer(const QList<const Player *> &players);
     void onPlayerChooseTriggerOrder(const QString &choice);
     void onPlayerChangeSkin(int skin_id, bool is_head = true);
     void onPlayerChooseSuit(const QString &suit);
     void onPlayerChooseKingdom();
-    void preshow(const QString &skill_name, const bool isPreshowed);
+    void preshow(const QString &skill_name, const bool isPreshowed, bool head);
     void trust();
     void addRobot();
     void fillRobots();
@@ -305,6 +320,7 @@ private:
     QTextDocument *lines_doc, *prompt_doc;
     int pile_num;
     QString skill_to_invoke;
+    QString skill_position;
     QList<int> available_cards;
 
     unsigned int _m_lastServerSerial;
@@ -332,7 +348,7 @@ signals:
     void player_added(ClientPlayer *new_player);
     void player_removed(const QString &player_name);
     // choice signal
-    void generals_got(const QStringList &generals, const bool single_result);
+    void generals_got(const QStringList &generals, const bool single_result, const bool can_convert);
     void kingdoms_got(const QStringList &kingdoms);
     void suits_got(const QStringList &suits);
     void options_got(const QString &skillName, const QStringList &options);
@@ -378,7 +394,7 @@ signals:
     void move_cards_got(int moveId, QList<CardsMoveStruct> moves);
 
     void skill_attached(const QString &skill_name, bool from_left);
-    void skill_detached(const QString &skill_name);
+    void skill_detached(const QString &skill_name, bool head = true);
     void do_filter();
 
     void nullification_asked(bool asked);
@@ -413,6 +429,10 @@ signals:
     void deputy_preshowed();
 
     void update_handcard_num();
+
+    void startPindian(const QString &requestor, const QString &reason, const QStringList &targets);
+    void onPindianReply(const QString &who, int card_id);
+    void pindianSuccess(int type, int index);
 };
 
 extern Client *ClientInstance;

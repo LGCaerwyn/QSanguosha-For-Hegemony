@@ -95,8 +95,6 @@ const char *QSanRoomSkin::S_SKIN_KEY_HEAD_ICON = "headIcon";
 const char *QSanRoomSkin::S_SKIN_KEY_DEPUTY_ICON = "deputyIcon";
 const char *QSanRoomSkin::S_SKIN_KEY_DISABLE_SHOW_LOCK = "%1DisableShowLock";
 
-const char *QSanRoomSkin::S_SKIN_KEY_CARD_TINY_ICON = "cardTiny-%1";
-
 //CardContainer
 const char *QSanRoomSkin::S_SKIN_KEY_CARD_CONTAINER_TOP = "cardContainerTop";
 const char *QSanRoomSkin::S_SKIN_KEY_CARD_CONTAINER_MIDDLE = "cardContainerMiddle";
@@ -346,6 +344,11 @@ QPixmap QSanRoomSkin::getProgressBarPixmap(int percentile) const
     return QPixmap();
 }
 
+QPixmap QSanRoomSkin::getCardTinyPixmap(const QString &card_name) const
+{
+    return getPixmap("cardTiny", card_name);
+}
+
 bool QSanRoomSkin::generalHasSkin(const QString &general, const int skinId, const bool isCard) const
 {
     const QString id = QString::number(skinId);
@@ -438,17 +441,7 @@ QPixmap QSanRoomSkin::getGeneralPixmap(const QString &generalName, GeneralIconSi
     return getPixmap(key, name, id, true);
 }
 
-QPixmap QSanRoomSkin::getCardTinyPixmap(const QString &card_object_name) const
-{
-    QString key = QString(S_SKIN_KEY_CARD_TINY_ICON).arg(card_object_name);
-    if (isImageKeyDefined(key))
-        return getPixmap(key);
-    key = QString(S_SKIN_KEY_CARD_TINY_ICON);
-    if (isImageKeyDefined(key.arg(S_SKIN_KEY_DEFAULT)))
-        return getPixmap(key, card_object_name);
-}
-
-QString QSanRoomSkin::getPlayerAudioEffectPath(const QString &eventName, const QString &category, int index, const Player *player) const
+QString QSanRoomSkin::getPlayerAudioEffectPath(const QString &eventName, const QString &category, int index, const Player *player, const QString &postion) const
 {
     QString fileName;
     QString key = QString(QSanRoomSkin::S_SKIN_KEY_PLAYER_AUDIO_EFFECT).arg(category).arg(eventName);
@@ -474,25 +467,46 @@ QString QSanRoomSkin::getPlayerAudioEffectPath(const QString &eventName, const Q
         QString general;
         int skinId = 0;
         if (player != NULL) {
-            if (player->inHeadSkills(skill)) {
-                general = player->getGeneralName();
+            if (!postion.isEmpty()) {
+                bool head = postion == "left";
+                general = head ? player->getActualGeneral1Name() : player->getActualGeneral2Name();
+                skinId = head ? player->getHeadSkinId() : player->getDeputySkinId();
+            } else if ((player->inHeadSkills(eventName) || player->getActualGeneral1()->hasSkill(eventName)) && player->canShowGeneral("h")) {
+                general = player->getActualGeneral1Name();
                 skinId = player->getHeadSkinId();
-            } else if (player->inDeputySkills(skill)) {
-                general = player->getGeneral2Name();
+            } else if ((player->inDeputySkills(eventName) || player->getActualGeneral2()->hasSkill(eventName)) && player->canShowGeneral("d")) {
+                general = player->getActualGeneral2Name();
                 skinId = player->getDeputySkinId();
             }
         }
+
         if (skill) fileNames = skill->getSources(general, skinId);
         if (!fileNames.isEmpty()) {
-            if (index < 0) {
-                fileName = fileNames.at(qrand() % fileNames.length());
-            } else {
-                if (fileNames.length() >= index) {
-                    return fileNames[index - 1];
+            QStringList sources_copy;
+            QRegExp rx(".+/" + eventName + "_" + general + "(\\d?).ogg");
+            foreach (QString source, fileNames) {
+                if (rx.exactMatch(source))
+                    sources_copy << source;
+            }
+            if (sources_copy.isEmpty()) {
+                QRegExp rx(".+/" + eventName + "(\\d?).ogg");
+                foreach (QString source, fileNames) {
+                    if (rx.exactMatch(source))
+                        sources_copy << source;
+                }
+            }
+            fileNames = sources_copy;
+            if (!fileNames.isEmpty()) {
+                if (index < 0) {
+                    fileName = fileNames.at(qrand() % fileNames.length());
                 } else {
-                    while (index > fileNames.length())
-                        index -= fileNames.length();
-                    return fileNames[index - 1];
+                    if (fileNames.length() >= index) {
+                        return fileNames[index - 1];
+                    } else {
+                        while (index > fileNames.length())
+                            index -= fileNames.length();
+                        return fileNames[index - 1];
+                    }
                 }
             }
         }
@@ -883,6 +897,27 @@ QPixmap IQSanComponentSkin::getPixmapFromFileName(const QString &fileName) const
 bool QSanRoomSkin::_loadAnimationConfig(const QVariant &)
 {
     return true;
+}
+
+QAbstractAnimation *QSanRoomSkin::createHuaShenAnimation(QPixmap &huashenAvatar, QPoint topLeft, QGraphicsItem *parent,
+    QGraphicsItem *&huashenAvatarCreated) const
+{
+    QLabel *avatar = new QLabel;
+    avatar->setStyleSheet("QLabel { background-color: transparent; }");
+    avatar->setPixmap(huashenAvatar);
+    QGraphicsProxyWidget *widget = new QGraphicsProxyWidget(parent);
+    widget->setWidget(avatar);
+    widget->setPos(topLeft);
+
+    QPropertyAnimation *animation = new QPropertyAnimation(widget, "opacity");
+    animation->setLoopCount(2000);
+    animation->setDuration(10000);
+    animation->setStartValue(0.1);
+    animation->setKeyValueAt(0.5, 0.9);
+    animation->setEndValue(0.1);
+
+    huashenAvatarCreated = widget;
+    return animation;
 }
 
 const QSanRoomSkin::RoomLayout &QSanRoomSkin::getRoomLayout() const

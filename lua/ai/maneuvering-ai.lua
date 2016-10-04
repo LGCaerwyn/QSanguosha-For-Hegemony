@@ -140,7 +140,7 @@ function SmartAI:shouldUseAnaleptic(target, card_use)
 		if basicnum < 3 then return false end
 	end
 
-	if target:hasArmorEffect("PeaceSpell") and card_use.card:isKindOf("NatureSlash") then return false end
+	if target:hasArmorEffect("PeaceSpell") and card_use.card and card_use.card:isKindOf("NatureSlash") then return false end
 
 	local hcard = target:getHandcardNum()
 	if self.player:hasSkill("liegong") and self.player:getPhase() == sgs.Player_Play and (hcard >= self.player:getHp() or hcard <= self.player:getAttackRange()) then return true end
@@ -235,7 +235,7 @@ function SmartAI:useCardSupplyShortage(card, use)
 		if enemy:hasShownSkills(sgs.cardneed_skill .. "|tianxiang")
 			then value = value + 5
 		end
-		if enemy:hasShownSkills("yingzi_zhouyu|yingzi_sunce|duoshi") then value = value + 1 end
+		if enemy:hasShownSkills("yingzi_zhouyu|yingzi_sunce|duoshi|yingzi") then value = value + 1 end
 		if self:isWeak(enemy) then value = value + 5 end
 		if enemy:isLord() then value = value + 3 end
 

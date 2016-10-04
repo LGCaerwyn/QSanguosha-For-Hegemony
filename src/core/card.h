@@ -67,7 +67,7 @@ public:
     };
     enum HandlingMethod
     {
-        MethodNone, MethodUse, MethodResponse, MethodDiscard, MethodRecast, MethodPindian
+        MethodNone, MethodUse, MethodResponse, MethodDiscard, MethodRecast, MethodPindian, MethodGet
     };
 
     static const Suit AllSuits[4];
@@ -200,13 +200,16 @@ public:
     static QString Suit2String(Suit suit);
     static const int S_UNKNOWN_CARD_ID;
 
-    static const Card *Parse(const QString &str);
+    static const Card *Parse(const QString &card_str);
     virtual QString toString(bool hidden = false) const;
 
     virtual QString getEffectName() const;
 
     virtual bool isTransferable() const;
     virtual void setTransferable(const bool transferbale);
+
+    virtual void setSkillPosition(const QString &position);
+    virtual QString getSkillPosition() const;
 
 protected:
     QList<int> subcards;
@@ -225,6 +228,8 @@ protected:
     QString show_skill;
 
     mutable QStringList flags;
+
+    QString m_skill_position;
 };
 
 typedef QList<const Card *> CardList;
@@ -255,6 +260,16 @@ class ArraySummonCard : public SkillCard
 
 public:
     Q_INVOKABLE ArraySummonCard(const QString &name);
+
+    const Card *validate(CardUseStruct &card_use) const;
+};
+
+class ShowDistanceCard : public SkillCard
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE ShowDistanceCard();
 
     const Card *validate(CardUseStruct &card_use) const;
 };

@@ -26,10 +26,14 @@
 #include "button.h"
 #include "client.h"
 #include "clientplayer.h"
+#include "cardcontainer.h"
 
 #include <QApplication>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsProxyWidget>
+#include <QPushButton>
+
+using namespace QSanProtocol;
 
 GeneralCardItem::GeneralCardItem(const QString &generalName, const int skinId)
     : CardItem(generalName), hasCompanion(false)
@@ -241,7 +245,7 @@ static bool sortByKingdom(const QString &gen1, const QString &gen2)
 
 }
 
-void ChooseGeneralBox::chooseGeneral(const QStringList &_generals, bool view_only, bool single_result, const QString &reason, const Player *player)
+void ChooseGeneralBox::chooseGeneral(const QStringList &_generals, bool view_only, bool single_result, const QString &reason, const Player *player, const bool can_convert)
 {
     //repaint background
     QStringList generals = _generals;
@@ -272,6 +276,12 @@ void ChooseGeneralBox::chooseGeneral(const QStringList &_generals, bool view_onl
     selected.clear();
     int z = generals.length();
 
+    convertContainer = new CardContainer;
+    convertContainer->setObjectName("");
+    convertContainer->hide();
+    convertContainer->setZValue(z + 3);
+    convertContainer->setParentItem(this);
+
     //DO NOT USE qSort HERE FOR WE NEED TO KEEP THE INITIAL ORDER IN SOME CASES
     qStableSort(generals.begin(), generals.end(), sortByKingdom);
 
@@ -285,6 +295,7 @@ void ChooseGeneralBox::chooseGeneral(const QStringList &_generals, bool view_onl
         }
 
         GeneralCardItem *general_item = new GeneralCardItem(general, skinId);
+        general_item->setProperty("source", general);
         general_item->setFlag(QGraphicsItem::ItemIsFocusable);
         general_item->setZValue(z--);
 
@@ -293,6 +304,13 @@ void ChooseGeneralBox::chooseGeneral(const QStringList &_generals, bool view_onl
         } else {
             general_item->setAutoBack(true);
             connect(general_item, &GeneralCardItem::released, this, &ChooseGeneralBox::_adjust);
+            if (!Sanguosha->getConvertGenerals(general).isEmpty() && can_convert) {
+                Button *button = new Button(Sanguosha->translate("convert_general"), 0.45);
+                button->setPos((93 - button->boundingRect().width()) / 2, 130 - button->boundingRect().height());
+                button->setParentItem(general_item);
+                button->setObjectName(general);
+                connect(button, &Button::clicked, this, &ChooseGeneralBox::_onConvertButtonClicked);
+            }
         }
 
         if (!view_only) {
@@ -356,10 +374,10 @@ void ChooseGeneralBox::chooseGeneral(const QStringList &_generals, bool view_onl
     if (!view_only && !single_result)
         _initializeItems();
 
-    if (!view_only && ServerInfo.OperationTimeout != 0) {
+    if (view_only || ServerInfo.OperationTimeout != 0) {
         if (!progress_bar) {
             progress_bar = new QSanCommandProgressBar();
-            progress_bar->setMinimumWidth(200);
+            progress_bar->setMaximumWidth(boundingRect().width() - 10);
             progress_bar->setMaximumHeight(12);
             progress_bar->setTimerEnabled(true);
             progress_bar_item = new QGraphicsProxyWidget(this);
@@ -367,7 +385,13 @@ void ChooseGeneralBox::chooseGeneral(const QStringList &_generals, bool view_onl
             progress_bar_item->setPos(boundingRect().center().x() - progress_bar_item->boundingRect().width() / 2, boundingRect().height() - 20);
             connect(progress_bar, &QSanCommandProgressBar::timedOut, this, &ChooseGeneralBox::reply);
         }
-        progress_bar->setCountdown(QSanProtocol::S_COMMAND_CHOOSE_GENERAL);
+        if (view_only) {
+            Countdown countdown;
+            countdown.max = 10000;
+            countdown.type = Countdown::S_COUNTDOWN_USE_SPECIFIED;
+            progress_bar->setCountdown(countdown);
+        } else
+            progress_bar->setCountdown(QSanProtocol::S_COMMAND_CHOOSE_GENERAL);
         progress_bar->show();
     }
 }
@@ -466,6 +490,7 @@ void ChooseGeneralBox::adjustItems()
         }
         if (confirm->isEnabled()) confirm->setEnabled(false);
     }
+    convertContainer->clear();
 }
 
 void ChooseGeneralBox::_initializeItems()
@@ -501,6 +526,12 @@ void ChooseGeneralBox::_initializeItems()
 
 void ChooseGeneralBox::reply()
 {
+    if (progress_bar != NULL) {
+        progress_bar->hide();
+        progress_bar->deleteLater();
+        progress_bar = NULL;
+    }
+
     if (m_viewOnly)
         return clear();
 
@@ -509,11 +540,6 @@ void ChooseGeneralBox::reply()
         generals = selected.first()->objectName();
         if (selected.length() == 2)
             generals += ("+" + selected.last()->objectName());
-    }
-    if (progress_bar != NULL) {
-        progress_bar->hide();
-        progress_bar->deleteLater();
-        progress_bar = NULL;
     }
     ClientInstance->onPlayerChooseGeneral(generals);
 }
@@ -554,5 +580,58 @@ void ChooseGeneralBox::_onItemClicked()
         selected << item;
     }
 
+    adjustItems();
+}
+
+void ChooseGeneralBox::_onConvertButtonClicked()
+{
+    Button *button = qobject_cast<Button *>(sender());
+    QString general = button->objectName();
+    if (convertContainer->isVisible()) {
+        convertContainer->clear();
+    }
+    if (convertContainer->objectName() == general) {
+        convertContainer->setObjectName("");
+        return;
+    }
+    QList<CardItem *> generals;
+    GeneralCardItem *origin_item = new GeneralCardItem(general, 0);
+    origin_item->setParentItem(convertContainer);
+    origin_item->setFlag(ItemIsMovable, false);
+    origin_item->setObjectName(general);
+    origin_item->setProperty("source", general);
+    connect(origin_item, &GeneralCardItem::clicked, this, &ChooseGeneralBox::_onConvertClicked);
+    generals << origin_item;
+
+    foreach (QString name, Sanguosha->getConvertGenerals(general)) {
+        GeneralCardItem *item = new GeneralCardItem(name, 0);
+        item->setParentItem(convertContainer);
+        item->setFlag(ItemIsMovable, false);
+        item->setObjectName(name);
+        item->setProperty("source", general);
+        connect(item, &GeneralCardItem::clicked, this, &ChooseGeneralBox::_onConvertClicked);
+        generals << item;
+    }
+    convertContainer->fillGeneralCards(generals);
+    convertContainer->setObjectName(general);
+    convertContainer->setPos(-93 * (Sanguosha->getConvertGenerals(general).length() +  1.5), 0);
+    convertContainer->show();
+}
+
+void ChooseGeneralBox::_onConvertClicked()
+{
+    GeneralCardItem *source_item = qobject_cast<GeneralCardItem *>(sender());
+    foreach (GeneralCardItem *item, items) {
+        if (item->property("source").toString() == source_item->property("source").toString()) {
+            item->changeGeneral(source_item->objectName());
+            break;
+        }
+    }
+    foreach (GeneralCardItem *item, selected) {
+        if (item->property("source").toString() == source_item->property("source").toString()) {
+            item->changeGeneral(source_item->objectName());
+            break;
+        }
+    }
     adjustItems();
 }

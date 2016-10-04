@@ -92,7 +92,9 @@ public:
     DummyCard *wholeHandCards() const;
     bool hasNullification() const;
     PindianStruct *pindianSelect(ServerPlayer *target, const QString &reason, const Card *card1 = NULL);
-    bool pindian(PindianStruct *pd); //pd is deleted after this function
+    PindianStruct *pindianSelect(const QList<ServerPlayer *> &target, const QString &reason, const Card *card1 = NULL);
+    bool pindian(PindianStruct *pd, int index = 1); //pd is deleted after this function
+
     void turnOver();
     void play(QList<Player::Phase> set_phases = QList<Player::Phase>());
     bool changePhase(Player::Phase from, Player::Phase to);
@@ -108,7 +110,7 @@ public:
     void loseAllMarks(const QString &mark_name);
 
     virtual void addSkill(const QString &skill_name, bool head_skill = true);
-    virtual void loseSkill(const QString &skill_name);
+    virtual void loseSkill(const QString &skill_name, bool head = true);
     virtual void setGender(General::Gender gender);
 
     void setAI(AI *ai);
@@ -152,6 +154,7 @@ public:
     void addToPile(const QString &pile_name, int card_id, bool open = true, QList<ServerPlayer *> open_players = QList<ServerPlayer *>());
     void addToPile(const QString &pile_name, QList<int> card_ids, bool open = true, QList<ServerPlayer *> open_players = QList<ServerPlayer *>());
     void addToPile(const QString &pile_name, QList<int> card_ids, bool open, QList<ServerPlayer *> open_players, CardMoveReason reason);
+    void pileAdd(const QString &pile_name, QList<int> card_ids);
     void gainAnExtraTurn();
 
     void copyFrom(ServerPlayer *sp);
@@ -210,7 +213,8 @@ public:
     // static function
     static bool CompareByActionOrder(ServerPlayer *a, ServerPlayer *b);
 
-    void showGeneral(bool head_general = true, bool trigger_event = true, bool sendLog = true);
+    bool showSkill(const QString &skill_name, const QString &skill_position = QString());
+    void showGeneral(bool head_general = true, bool trigger_event = true, bool sendLog = true, bool ignore_rule = true);
     void hideGeneral(bool head_general = true);
     void removeGeneral(bool head_general = true);
     void sendSkillsToOthers(bool head_skill = true);
@@ -230,6 +234,9 @@ public:
     bool event_received;
 
     void changeToLord();
+
+    void setActualGeneral1Name(const QString &name);
+    void setActualGeneral2Name(const QString &name);
 
 protected:
     //Synchronization helpers

@@ -26,7 +26,7 @@
 #include "settings.h"
 #include "json.h"
 #include "roomthread.h"
-
+#include <QFile>
 #include <QTime>
 
 class GameRule_AskForGeneralShowHead : public TriggerSkill
@@ -130,10 +130,16 @@ public:
             foreach (ServerPlayer *p, room->getAllPlayers()) {
                 if (p->getActualGeneral1() != NULL) {
                     QString lord = "lord_" + p->getActualGeneral1()->objectName();
-                    const General *lord_general = Sanguosha->getGeneral(lord);
-                    if (lord_general && !Sanguosha->getBanPackages().contains(lord_general->getPackage())) {
-                        trigger_map.insert(p, QStringList(objectName()));
+                    bool check = true;
+                    foreach (ServerPlayer *p2, room->getOtherPlayers(p)) {                                 //no duplicate lord
+                        if (p != p2 && lord == "lord_" + p2->getActualGeneral1()->objectName()) {
+                            check = false;
+                            break;
+                        }
                     }
+                    const General *lord_general = Sanguosha->getGeneral(lord);
+                    if (check && lord_general && !Sanguosha->getBanPackages().contains(lord_general->getPackage()))
+                        trigger_map.insert(p, QStringList(objectName()));
                 }
             }
         }
@@ -143,7 +149,7 @@ public:
 
     virtual bool cost(TriggerEvent, Room *, ServerPlayer *, QVariant &, ServerPlayer *ask_who) const
     {
-        return ask_who->askForSkillInvoke("userdefine:changetolord");
+        return ask_who->askForSkillInvoke("userdefine:changetolord", "GameStart");
     }
 
     virtual bool effect(TriggerEvent, Room *, ServerPlayer *, QVariant &, ServerPlayer *ask_who) const
@@ -167,7 +173,7 @@ GameRule::GameRule(QObject *parent)
         << BeforeGameOverJudge << GameOverJudge
         << SlashHit << SlashEffected << SlashProceed
         << ConfirmDamage << DamageDone << DamageComplete
-        << FinishRetrial << FinishJudge
+        << StartJudge << FinishRetrial << FinishJudge
         << ChoiceMade << GeneralShown
         << BeforeCardsMove << CardsMoveOneTime;
 
@@ -276,6 +282,8 @@ bool GameRule::effect(TriggerEvent triggerEvent, Room *room, ServerPlayer *playe
     // Handle global events
     if (player == NULL) {
         if (triggerEvent == GameStart) {
+            if (QFile::exists("image/animate/gamestart.png"))
+                room->doLightbox("$gamestart", 3500);
             foreach (ServerPlayer *player, room->getPlayers()) {
                 Q_ASSERT(player->getGeneral() != NULL);
                 /*
@@ -492,7 +500,7 @@ bool GameRule::effect(TriggerEvent triggerEvent, Room *room, ServerPlayer *playe
     }
     case EventAcquireSkill:
     case EventLoseSkill: {
-        QString skill_name = data.toString();
+        QString skill_name = data.toString().split(":").first();
         const Skill *skill = Sanguosha->getSkill(skill_name);
         bool refilter = skill->inherits("FilterSkill");
 
@@ -768,6 +776,23 @@ bool GameRule::effect(TriggerEvent triggerEvent, Room *room, ServerPlayer *playe
             }
         }
 
+        break;
+    }
+    case StartJudge: {
+        int card_id = room->drawCard();
+
+        JudgeStruct *judge_struct = data.value<JudgeStruct *>();
+        judge_struct->card = Sanguosha->getCard(card_id);
+
+        LogMessage log;
+        log.type = "$InitialJudge";
+        log.from = judge_struct->who;
+        log.card_str = QString::number(judge_struct->card->getEffectiveId());
+        room->sendLog(log);
+
+        room->moveCardTo(judge_struct->card, NULL, judge_struct->who, Player::PlaceJudge,
+            CardMoveReason(CardMoveReason::S_REASON_JUDGE, judge_struct->who->objectName(), QString(), QString(), judge_struct->reason), true);
+        judge_struct->updateResult();
         break;
     }
     case FinishRetrial: {

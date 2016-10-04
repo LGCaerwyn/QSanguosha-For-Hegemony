@@ -80,11 +80,23 @@ QRectF CardItem::boundingRect() const
 void CardItem::setCard(const Card *card)
 {
     if (card != NULL) {
-        m_cardId = card->getId();
-        const Card *engineCard = Sanguosha->getEngineCard(m_cardId);
-        Q_ASSERT(engineCard != NULL);
-        setObjectName(engineCard->objectName());
-        setToolTip(engineCard->getDescription());
+        if (card->isVirtualCard()) {
+            m_cardId = Card::S_UNKNOWN_CARD_ID;
+            Vcard = card;
+            setObjectName(card->objectName());
+            for (int i = 0; i <= Sanguosha->getCardCount() - 1; i++) {
+                if (Sanguosha->getEngineCard(i)->objectName() == card->objectName()) {
+                    setToolTip(Sanguosha->getEngineCard(i)->getDescription());
+                    break;
+                }
+            }
+        } else {
+            m_cardId = card->getId();
+            const Card *engineCard = Sanguosha->getEngineCard(m_cardId);
+            Q_ASSERT(engineCard != NULL);
+            setObjectName(engineCard->objectName());
+            setToolTip(engineCard->getDescription());
+        }
     } else {
         m_cardId = Card::S_UNKNOWN_CARD_ID;
         setObjectName("unknown");
@@ -214,9 +226,11 @@ void CardItem::hideFrame()
     _m_frameType = QString();
 }
 
-void CardItem::showAvatar(const General *general)
+void CardItem::showAvatar(const General *general, const QString card_name)
 {
-    _m_avatarName = general->objectName();
+    QString name = general->objectName();
+    if (!card_name.isEmpty()) name = name + ":" + card_name;
+    _m_avatarName = name;
 }
 
 void CardItem::hideAvatar()
@@ -306,6 +320,9 @@ void CardItem::setTransferable(const bool transferable)
     _transferable = transferable;
     if (transferable && _transferButton == NULL) {
         _transferButton = new TransferButton(this);
+#ifdef Q_OS_ANDROID
+        _transferButton->setScale(2);
+#endif
         _transferButton->setPos(0, -20);
         _transferButton->setEnabled(false);
         _transferButton->hide();
@@ -399,7 +416,12 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidge
 
     const Card *card = Sanguosha->getEngineCard(m_cardId);
     if (!_m_isUnknownGeneral) {
-        if (card || objectName() == "unknown") {
+        const General *general = Sanguosha->getGeneral(objectName());
+        if (!card && objectName() != "unknown" && !general) {
+            painter->drawPixmap(G_COMMON_LAYOUT.m_cardMainArea,
+                G_ROOM_SKIN.getCardMainPixmap(objectName()));
+        }
+        else if (card || objectName() == "unknown") {
             painter->drawPixmap(G_COMMON_LAYOUT.m_cardMainArea,
                 G_ROOM_SKIN.getCardMainPixmap(objectName()));
         } else {
@@ -421,10 +443,33 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidge
         // Deal with stupid QT...
         if (_m_showFootnote)
             painter->drawImage(rect, _m_footnoteImage);
+    } else if (Vcard != NULL && Vcard->isVirtualCard()) {
+        painter->drawPixmap(G_COMMON_LAYOUT.m_cardSuitArea, G_ROOM_SKIN.getCardSuitPixmap(Vcard->getSuit()));
+
+        if (Vcard->getNumber() > 0)
+            painter->drawPixmap(G_COMMON_LAYOUT.m_cardNumberArea, G_ROOM_SKIN.getCardNumberPixmap(Vcard->getNumber(), !Vcard->isRed()));
+
+        if (Vcard->isTransferable())
+            painter->drawPixmap(G_COMMON_LAYOUT.m_cardTransferableIconArea,
+            G_ROOM_SKIN.getPixmap(QSanRoomSkin::S_SKIN_KEY_CARD_TRANSFERABLE_ICON));
     }
 
-    if (!_m_avatarName.isEmpty())
-        painter->drawPixmap(G_COMMON_LAYOUT.m_cardAvatarArea, G_ROOM_SKIN.getCardAvatarPixmap(_m_avatarName));
+    if (!_m_avatarName.isEmpty()) {
+        QStringList names = _m_avatarName.split(":");
+        painter->drawPixmap(G_COMMON_LAYOUT.m_cardAvatarArea, G_ROOM_SKIN.getCardAvatarPixmap(names.first()));
+        if (names.length() > 1) {
+            IQSanComponentSkin::QSanShadowTextFont font = G_DASHBOARD_LAYOUT.m_skillTextFonts[0];
+            font.m_color = Qt::white;
+            font.m_shadowColor = Qt::darkGray;
+            QString card_name = Sanguosha->translate(names.last());
+            QRect rect = G_COMMON_LAYOUT.m_cardAvatarArea;
+            rect.setX(rect.left() - 10);
+            rect.setY(rect.bottom() - 10);
+            rect.setWidth(60);
+            rect.setHeight(15);
+            font.paintText(painter, rect, Qt::AlignHCenter, card_name);
+        }
+    }
 }
 
 void CardItem::setFootnote(const QString &desc)

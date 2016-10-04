@@ -87,7 +87,6 @@ void RoomThread::addPlayerSkills(ServerPlayer *player, bool invoke_game_start)
     bool invoke_verify = false;
 
     foreach (const TriggerSkill *skill, player->getTriggerSkills()) {
-        addTriggerSkill(skill);
 
         if (invoke_game_start && skill->getTriggerEvents().contains(GameStart))
             invoke_verify = true;
@@ -100,6 +99,10 @@ void RoomThread::addPlayerSkills(ServerPlayer *player, bool invoke_game_start)
 
 void RoomThread::constructTriggerTable()
 {
+    foreach (QString skill_name, Sanguosha->getSkillNames()) {
+        const TriggerSkill *skill = Sanguosha->getTriggerSkill(skill_name);
+        if (skill) addTriggerSkill(skill);
+    }
     foreach(ServerPlayer *player, room->getPlayers())
         addPlayerSkills(player, true);
 }
@@ -257,6 +260,7 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                                         if (trskill) { // "yiji"
                                             will_trigger.append(trskill);
                                             trigger_who[p].append(skill_name);
+
                                         } else {
                                             trskill = Sanguosha->getTriggerSkill(skill_name.split("'").last());
                                             if (trskill) { // "sgs1'songwei"
@@ -281,7 +285,6 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                 }
                 triggerable_tested << skill;
             }
-
             if (!will_trigger.isEmpty()) {
                 will_trigger.clear();
                 //foreach (ServerPlayer *p, room->getPlayers()) {
@@ -298,7 +301,7 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                                 trskill = Sanguosha->getTriggerSkill(skill.split("'").last()); // "sgs1'songwei"
                             if (!trskill)
                                 trskill = Sanguosha->getTriggerSkill(skill.split("->").first()); // "tieqi->sgs4+sgs8+sgs1+sgs2"
-                            if (trskill && p->hasShownSkill(trskill)
+                            if (trskill && (p->hasShownSkill(trskill) || trskill->isGlobal())
                                 && (trskill->getFrequency() == Skill::Compulsory
                                 //|| trskill->getFrequency() == Skill::NotCompulsory //for Paoxia, Anjian, etc.
                                 || trskill->getFrequency() == Skill::Wake)) {
@@ -310,7 +313,9 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                         QStringList names, back_up;
                         foreach (const QString &skill_name, who_skills) {
                             if (skill_name.contains("->")) { // "tieqi->sgs4+sgs8+sgs1+sgs2"
-                                QString realSkillName = skill_name.split("->").first(); // "tieqi"
+                                QString realSkillName = skill_name.split("->").first().split("?").last(); // "tieqi"
+                                QString skill_position;
+                                if (skill_name.contains("?")) skill_position = skill_name.split("?").first();
                                 QStringList targets = skill_name.split("->").last().split("+"); // ["sgs4", "sgs8", "sgs1", "sgs2"]
                                 int index = 1; // this index is for UI only
                                 bool cannotSkip = false;
@@ -321,7 +326,11 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                                     || trskill->getFrequency() == Skill::Wake))
                                     cannotSkip = true;
                                 foreach (const QString &target, targets) {
-                                    QString name = QString("%1->%2&%3").arg(realSkillName).arg(target).arg(index);
+                                    QString name;
+                                    if (!skill_position.isEmpty())
+                                        name = QString("%1?%2->%3&%4").arg(skill_position).arg(realSkillName).arg(target).arg(index);
+                                    else
+                                        name = QString("%1->%2&%3").arg(realSkillName).arg(target).arg(index);
                                     if (names.contains(name))
                                         back_up << name;
                                     else
@@ -352,14 +361,16 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                         if (name.isEmpty()) {
                             if (p && !p->hasShownAllGenerals())
                                 p->setFlags("Global_askForSkillCost");           // TriggerOrder need protect
-                            if (names.length() == 1 && back_up.isEmpty()) {
+                            if (names.length() == 1 && back_up.isEmpty() && names.first().contains("AskForGeneralShow") && p != NULL) {
                                 // users should be able to cancel if it triggers someskill 100 times.
-                                name = names.first();
-                                if (name.contains("AskForGeneralShow") && p != NULL) {
+                                //name = names.first();                                                       //edit for both generals have the same skill, it must be check
+                                //if (name.contains("AskForGeneralShow") && p != NULL) {                      //by function triggerorder. by weirdouncle
                                     SPlayerDataMap map;
                                     map[p] = names;
                                     name = room->askForTriggerOrder(p, "GameRule:TurnStart", map, true, data);
-                                }
+                                //}
+                            } else if (names.length() == 1 && back_up.isEmpty() && (p == NULL || names.first().contains("global-fake-move"))) {
+                                name = names.first();
                             } else if (p != NULL) {
                                 QString reason = "GameRule:TriggerOrder";
                                 if (names.length() == 2 && names.contains("GameRule_AskForGeneralShowHead"))
@@ -386,7 +397,11 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                         }
 
                         if (name == "cancel") break;
-                        // "xxxx*yyy", "sgs1:xxxx" or "sgs1:xxxx*yyy"
+                        QString skill_owner = name.split(":").first();
+                        QString skill_position;
+                        if (skill_owner.contains("?")) skill_position = skill_owner.split("?").last();
+
+                        // "xxxx*yyy", "sgs1:xxxx" or "sgs1:xxxx*yyy", now it may be "sgs1?left:xxxx" or "sgs1?right:xxxx*yyy" or "sgs1?right:tieqi->sgs2&1"
                         int split = -1;
                         if ((split = name.indexOf('*')) != -1)
                             name = name.left(split);
@@ -406,6 +421,15 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                             result_skill = Sanguosha->getTriggerSkill(name);
                         }
 
+                        const Skill *mainskill = NULL;
+                        if (p && result_skill && !skill_position.isEmpty())
+                            mainskill = Sanguosha->getMainSkill(result_skill->objectName());
+                        if (mainskill != NULL) {
+                            QStringList skill_positions = room->getTag(mainskill->objectName() + p->objectName()).toStringList();   //for player audio & show
+                            skill_positions.append(skill_position);
+                            room->setTag(mainskill->objectName() + p->objectName(), skill_positions);
+                        }
+
                         Q_ASSERT(skill_target && result_skill);
 
                         //----------------------------------------------- TriggerSkill::cost
@@ -415,11 +439,15 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                         bool do_effect = false;
                         if (result_skill->cost(triggerEvent, room, skill_target, data, p)) {
                             do_effect = true;
-                            if (p && p->ownSkill(result_skill) && !p->hasShownSkill(result_skill)) {
-                                p->showGeneral(p->inHeadSkills(result_skill));
-                                p->tag["JustShownSkill"] = result_skill->objectName();
+                            if (p) {
+                                QString position;
+                                if (mainskill)
+                                    position = room->getTag(mainskill->objectName() + p->objectName()).toStringList().last();
+                                bool show = p->showSkill(result_skill->objectName(), position);
+                                if (show) p->tag["JustShownSkill"] = result_skill->objectName();
                             }
                         }
+
                         if (p && p->hasFlag("Global_askForSkillCost"))          // for next time
                             p->setFlags("-Global_askForSkillCost");
                         //-----------------------------------------------
@@ -427,11 +455,26 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                         //----------------------------------------------- TriggerSkill::effect
                         if (do_effect) {
                             broken = result_skill->effect(triggerEvent, room, skill_target, data, p);
-                            if (broken)
+                            if (broken) {
+                                if (mainskill != NULL) {
+                                    QStringList skill_positions = room->getTag(mainskill->objectName() + p->objectName()).toStringList();    //remove this record before broken
+                                    if (!skill_positions.isEmpty()) {
+                                        skill_positions.removeLast();
+                                        room->setTag(mainskill->objectName() + p->objectName(), skill_positions);
+                                    }
+                                }
+                                p->tag.remove("JustShownSkill");
                                 break;
+                            }
                         }
                         //-----------------------------------------------
-
+                        if (mainskill != NULL) {
+                            QStringList skill_positions = room->getTag(mainskill->objectName() + p->objectName()).toStringList();           //remove this record
+                            if (!skill_positions.isEmpty()) {
+                                skill_positions.removeLast();
+                                room->setTag(mainskill->objectName() + p->objectName(), skill_positions);
+                            }
+                        }
                         p->tag.remove("JustShownSkill");
 
                         trigger_who.clear();
@@ -476,7 +519,7 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                                 QString triggered_target = s.split("->").last().split("&").first();
                                 foreach (const QString &skill, trigger_who[p]) {
                                     if (skill.contains("->")) { // "tieqi->sgs4+sgs8+sgs1+sgs2"
-                                        if (skill.split("->").first() == skillName_copy) { // check skill
+                                        if (skill.split("->").first().split("?").last() == skillName_copy) { // check skill
                                             QStringList targets = skill.split("->").last().split("+");
                                             if (!targets.contains(triggered_target)) {
                                                 // here may cause a bug, if the first triggerlist contains "triggered_target"
@@ -489,7 +532,11 @@ bool RoomThread::trigger(TriggerEvent triggerEvent, Room *room, ServerPlayer *ta
                                                 else {
                                                     QStringList targets_after = targets.mid(n + 1);
                                                     // remove the targets before triggered_target
-                                                    QString skill_after = QString("%1->%2").arg(skillName_copy).arg(targets_after.join("+"));
+                                                    QString skill_after;
+                                                    if (!skill_position.isEmpty())                           //it has triggered already and wont check which general to invoke again. by weidouncle
+                                                        skill_after = QString("%1?%2->%3").arg(skill_position).arg(skillName_copy).arg(targets_after.join("+"));
+                                                    else
+                                                        skill_after = QString("%1->%2").arg(skillName_copy).arg(targets_after.join("+"));
                                                     trigger_who[p].replaceInStrings(skill, skill_after);
                                                 }
                                             }

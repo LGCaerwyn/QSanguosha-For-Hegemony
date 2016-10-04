@@ -35,11 +35,22 @@
 #include <QColorDialog>
 #include <QTextStream>
 #include <QLineEdit>
+#include <QDesktopWidget>
 
 ConfigDialog::ConfigDialog(QWidget *parent)
     : FlatDialog(parent, false), ui(new Ui::ConfigDialog)
 {
     ui->setupUi(this);
+#ifdef Q_OS_ANDROID
+    QDesktopWidget* desktop = qApp->desktop();
+    setMinimumSize(desktop->width(), desktop->height());
+    setStyleSheet("background-color: #F0FFF0; color: black;");
+    ui->layoutWidget->setGeometry(QRect(1, 1, desktop->width() - 2, desktop->height() - 1));
+    ui->layoutWidget4->setMinimumSize(desktop->width() - 200, desktop->height() - 250);
+    delete ui->toolTipBackgroundColorButton;
+    //delete ui->gameRecordFrame;
+    delete ui->fontSetupFrame;
+#endif
 
     connect(this, &ConfigDialog::windowTitleChanged, ui->windowTitle, &QLabel::setText);
 
@@ -49,12 +60,12 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     ui->tableBgPathLineEdit->setText(Config.TableBgImage);
 
     QFont font = Config.AppFont;
-#if !defined(Q_OS_IOS)
+#if (!defined(Q_OS_IOS) && !defined(Q_OS_ANDROID))
     showFont(ui->appFontLineEdit, font);
 #endif
 
     font = Config.UIFont;
-#if !defined(Q_OS_IOS)
+#if (!defined(Q_OS_IOS) && !defined(Q_OS_ANDROID))
     showFont(ui->textEditFontLineEdit, font);
 #endif
 
@@ -63,7 +74,7 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     QColor color = Config.TextEditColor;
     int aver = (color.red() + color.green() + color.blue()) / 3;
     palette.setColor(QPalette::Base, aver >= 208 ? Qt::black : Qt::white);
-#if !defined(Q_OS_IOS)
+#if (!defined(Q_OS_IOS) && !defined(Q_OS_ANDROID))
     ui->textEditFontLineEdit->setPalette(palette);
 #endif
 
@@ -180,7 +191,7 @@ void ConfigDialog::setAppFont(const QVariant &font)
 {
     QFont newFont = font.value<QFont>();
     Config.AppFont = newFont;
-#if !defined(Q_OS_IOS)
+#if (!defined(Q_OS_IOS) && !defined(Q_OS_ANDROID))
     showFont(ui->appFontLineEdit, newFont);
 #endif
 
@@ -191,7 +202,7 @@ void ConfigDialog::setTextEditFont(const QVariant &font)
 {
     QFont newFont = font.value<QFont>();
     Config.UIFont = newFont;
-#if !defined(Q_OS_IOS)
+#if (!defined(Q_OS_IOS) && !defined(Q_OS_ANDROID))
     showFont(ui->textEditFontLineEdit, newFont);
 #endif
     QApplication::setFont(newFont, "QTextEdit");

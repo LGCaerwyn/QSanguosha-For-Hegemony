@@ -51,7 +51,7 @@ public:
     explicit Skill(const QString &name, Frequency frequent = NotFrequent);
     bool isLordSkill() const;
     bool isAttachedLordSkill() const;
-    QString getDescription(bool inToolTip = true) const;
+    QString getDescription(bool inToolTip = true, bool in_game = false) const;
     QString getNotice(int index) const;
     bool isVisible() const;
 
@@ -98,6 +98,7 @@ public:
     virtual bool viewFilter(const QList<const Card *> &selected, const Card *to_select) const = 0;
     virtual const Card *viewAs(const QList<const Card *> &cards) const = 0;
 
+    QString getGuhuoBox() const;
     bool isAvailable(const Player *invoker, CardUseStruct::CardUseReason reason, const QString &pattern) const;
     virtual bool isEnabledAtPlay(const Player *player) const;
     virtual bool isEnabledAtResponse(const Player *player, const QString &pattern) const;
@@ -108,15 +109,13 @@ public:
     {
         return response_or_use;
     }
-    inline QString getExpandPile() const
-    {
-        return expand_pile;
-    }
+    virtual QString getExpandPile() const;
 
 protected:
     QString response_pattern;
     bool response_or_use;
     QString expand_pile;
+    QString guhuo_type;
 };
 
 class ZeroCardViewAsSkill : public ViewAsSkill
@@ -129,6 +128,7 @@ public:
     virtual bool viewFilter(const QList<const Card *> &selected, const Card *to_select) const;
     virtual const Card *viewAs(const QList<const Card *> &cards) const;
     virtual const Card *viewAs() const = 0;
+    virtual QString getExpandPile() const;
 };
 
 class OneCardViewAsSkill : public ViewAsSkill
@@ -143,6 +143,7 @@ public:
 
     virtual bool viewFilter(const Card *to_select) const;
     virtual const Card *viewAs(const Card *originalCard) const = 0;
+    virtual QString getExpandPile() const;
 
 protected:
     QString filter_pattern;
@@ -154,6 +155,9 @@ class FilterSkill : public OneCardViewAsSkill
 
 public:
     FilterSkill(const QString &name);
+
+    virtual bool viewFilter(const Card *to_select, ServerPlayer *player) const = 0;
+    virtual bool isEnabledAtPlay(const Player *) const;
 };
 
 typedef QMap<ServerPlayer *, QStringList> TriggerList;
@@ -184,6 +188,7 @@ public:
 
     virtual void record(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
 
+    virtual QString getGuhuoBox() const;
     virtual TriggerList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data) const;
     virtual QStringList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer* &ask_who) const;
     virtual bool cost(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
@@ -201,6 +206,7 @@ protected:
     QList<TriggerEvent> events;
     bool global;
     QHash<TriggerEvent, double> priority;
+    QString guhuo_type;
 
 private:
     mutable double current_priority;
@@ -313,6 +319,22 @@ public:
     DistanceSkill(const QString &name);
 
     virtual int getCorrect(const Player *from, const Player *to) const = 0;
+    const ViewAsSkill *getViewAsSkill() const;
+
+protected:
+    const ViewAsSkill *view_as_skill;
+};
+
+class ShowDistanceSkill : public ZeroCardViewAsSkill
+{
+    Q_OBJECT
+
+public:
+
+    ShowDistanceSkill(const QString &name);
+
+    const Card *viewAs() const;
+    virtual bool isEnabledAtPlay(const Player *player) const;
 };
 
 class MaxCardsSkill : public Skill
@@ -329,7 +351,7 @@ public:
 class TargetModSkill : public Skill
 {
     Q_OBJECT
-        Q_ENUMS(ModType)
+    Q_ENUMS(ModType)
 
 public:
     enum ModType
@@ -400,7 +422,7 @@ public:
 
     virtual QStringList triggerable(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer * &ask_who) const;
     virtual bool effect(TriggerEvent triggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *ask_who = NULL) const;
-    virtual void onSkillDetached(Room *room, ServerPlayer *player) const;
+    virtual void onSkillDetached(Room *room, ServerPlayer *player, QVariant &data) const;
 
 private:
     QString name, pile_name;
@@ -426,6 +448,8 @@ public:
 
     virtual int getPriority() const;
     virtual bool triggerable(const ServerPlayer *target) const;
+    virtual bool cost(Room *room, ServerPlayer *player, QVariant &data) const;
+    virtual void playAudio(const ServerPlayer *target) const;
 };
 
 class TreasureSkill : public TriggerSkill
@@ -437,6 +461,33 @@ public:
 
     virtual int getPriority() const;
     virtual bool triggerable(const ServerPlayer *target) const;
+};
+
+class FixCardSkill : public Skill
+{
+    Q_OBJECT
+
+public:
+    FixCardSkill(const QString &name);
+
+    virtual bool isCardFixed(const Player *from, const Player *to, const QString &flags, Card::HandlingMethod method) const = 0;
+};
+
+class ViewHasSkill : public Skill
+{
+    Q_OBJECT
+
+public:
+    ViewHasSkill(const QString &name);
+
+    virtual bool ViewHas(const Player *player, const QString &skill_name, const QString &flag) const = 0;
+    inline bool isGlobal() const
+    {
+        return global;
+    }
+
+protected:
+    bool global;
 };
 
 #endif

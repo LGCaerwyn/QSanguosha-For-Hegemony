@@ -29,6 +29,7 @@
 #include "serverplayer.h"
 
 #include <QFile>
+#include <QDir>
 
 Skill::Skill(const QString &name, Frequency frequency)
     : frequency(frequency), limit_mark(QString()), relate_to_place(QString()), attached_lord_skill(false)
@@ -56,7 +57,7 @@ bool Skill::isAttachedLordSkill() const
     return attached_lord_skill;
 }
 
-QString Skill::getDescription(bool inToolTip) const
+QString Skill::getDescription(bool inToolTip, bool in_game) const
 {
     QString desc;
     if (!canPreshow())
@@ -69,6 +70,9 @@ QString Skill::getDescription(bool inToolTip) const
     }
 
     QString des_src = Sanguosha->translate(":" + skill_name);
+    if (in_game && Sanguosha->getSkill(skill_name) && Sanguosha->getSkill(skill_name)->isAttachedLordSkill()
+            && (!Self->isLord() || !Self->getGeneral()->getRelatedSkillNames().contains(skill_name)))
+        des_src = Sanguosha->translate("&" + skill_name) != "&" + skill_name ? Sanguosha->translate("&" + skill_name) : des_src;
     if (des_src == ":" + skill_name)
         return desc;
 
@@ -122,9 +126,20 @@ int Skill::getEffectIndex(const ServerPlayer *, const Card *) const
 void Skill::initMediaSource()
 {
     sources.clear();
+    QDir dir;
+    dir.setPath("./audio/skill");
+    dir.setFilter(QDir::Files | QDir::Hidden);
+    dir.setSorting(QDir::Name);
+    QStringList names = dir.entryList();
+    QStringList newnames = names.filter(objectName() + "_");
+    foreach (QString name, newnames) {
+        if (QFile::exists("audio/skill/" +  name))
+            sources << "audio/skill/" +  name;
+    }
+
     for (int i = 1;; ++i) {
         QString effect_file = QString("audio/skill/%1%2.ogg").arg(objectName()).arg(QString::number(i));
-        if (QFile::exists(effect_file))
+        if (QFile::exists(effect_file) && !sources.contains(effect_file))
             sources << effect_file;
         else
             break;
@@ -132,7 +147,7 @@ void Skill::initMediaSource()
 
     if (sources.isEmpty()) {
         QString effect_file = QString("audio/skill/%1.ogg").arg(objectName());
-        if (QFile::exists(effect_file))
+        if (QFile::exists(effect_file) && !sources.contains(effect_file))
             sources << effect_file;
     }
 }
@@ -214,6 +229,13 @@ QDialog *Skill::getDialog() const
 
 QString Skill::getGuhuoBox() const
 {
+    if (inherits("TriggerSkill")) {
+        const TriggerSkill *triskill = qobject_cast<const TriggerSkill *>(this);
+        return triskill->getGuhuoBox();
+    } else if (inherits("ViewAsSkill")) {
+        const ViewAsSkill *view_as_skill = qobject_cast<const ViewAsSkill *>(this);
+        return view_as_skill->getGuhuoBox();
+    }
     return "";
 }
 
@@ -239,6 +261,16 @@ bool Skill::relateToPlace(bool head) const
 ViewAsSkill::ViewAsSkill(const QString &name)
     : Skill(name), response_pattern(QString()), response_or_use(false), expand_pile(QString())
 {
+}
+
+QString ViewAsSkill::getGuhuoBox() const
+{
+    return guhuo_type;
+}
+
+QString TriggerSkill::getGuhuoBox() const
+{
+    return guhuo_type;
 }
 
 bool ViewAsSkill::isAvailable(const Player *invoker, CardUseStruct::CardUseReason reason, const QString &pattern) const
@@ -286,7 +318,18 @@ const ViewAsSkill *ViewAsSkill::parseViewAsSkill(const Skill *skill)
         const ViewAsSkill *view_as_skill = trigger_skill->getViewAsSkill();
         if (view_as_skill != NULL) return view_as_skill;
     }
+    if (skill->inherits("DistanceSkill")) {
+        const DistanceSkill *trigger_skill = qobject_cast<const DistanceSkill *>(skill);
+        Q_ASSERT(trigger_skill != NULL);
+        const ViewAsSkill *view_as_skill = trigger_skill->getViewAsSkill();
+        if (view_as_skill != NULL) return view_as_skill;
+    }
     return NULL;
+}
+
+QString ViewAsSkill::getExpandPile() const
+{
+    return expand_pile;
 }
 
 ZeroCardViewAsSkill::ZeroCardViewAsSkill(const QString &name)
@@ -305,6 +348,11 @@ const Card *ZeroCardViewAsSkill::viewAs(const QList<const Card *> &cards) const
 bool ZeroCardViewAsSkill::viewFilter(const QList<const Card *> &, const Card *) const
 {
     return false;
+}
+
+QString ZeroCardViewAsSkill::getExpandPile() const
+{
+    return expand_pile;
 }
 
 OneCardViewAsSkill::OneCardViewAsSkill(const QString &name)
@@ -347,16 +395,27 @@ const Card *OneCardViewAsSkill::viewAs(const QList<const Card *> &cards) const
         return viewAs(cards.first());
 }
 
+QString OneCardViewAsSkill::getExpandPile() const
+{
+    return expand_pile;
+}
+
 FilterSkill::FilterSkill(const QString &name)
     : OneCardViewAsSkill(name)
 {
     frequency = Compulsory;
 }
 
+bool FilterSkill::isEnabledAtPlay(const Player *) const
+{
+    return false;
+}
+
 TriggerSkill::TriggerSkill(const QString &name)
     : Skill(name), view_as_skill(NULL), global(false), current_priority(0.0)
 {
     priority.clear();
+    guhuo_type = "";
 }
 
 const ViewAsSkill *TriggerSkill::getViewAsSkill() const
@@ -554,6 +613,7 @@ bool ArraySummonSkill::isEnabledAtPlay(const Player *player) const
 {
     if (player->getAliveSiblings().length() < 3) return false;
     if (player->hasFlag("Global_SummonFailed")) return false;
+    if (!player->canShowGeneral(player->inHeadSkills(objectName()) ? "h" : "d")) return false;
     const BattleArraySkill *skill = qobject_cast<const BattleArraySkill *>(Sanguosha->getTriggerSkill(objectName()));
     if (skill) {
         ArrayType type = skill->getArrayType();
@@ -616,6 +676,33 @@ ProhibitSkill::ProhibitSkill(const QString &name)
 DistanceSkill::DistanceSkill(const QString &name)
     : Skill(name, Skill::Compulsory)
 {
+    view_as_skill = new ShowDistanceSkill(objectName());
+}
+
+const ViewAsSkill *DistanceSkill::getViewAsSkill() const
+{
+    return view_as_skill;
+}
+
+ShowDistanceSkill::ShowDistanceSkill(const QString &name)
+    : ZeroCardViewAsSkill(name)
+{
+}
+
+const Card *ShowDistanceSkill::viewAs() const
+{
+    SkillCard *card = Sanguosha->cloneSkillCard("ShowMashu");
+    card->setUserString(objectName());
+    return card;
+}
+
+bool ShowDistanceSkill::isEnabledAtPlay(const Player *player) const
+{
+    const DistanceSkill *skill = qobject_cast<const DistanceSkill *>(Sanguosha->getSkill(objectName()));
+    if (skill) {
+        if (!player->hasShownSkill(skill->objectName())) return true;
+    }
+    return false;
 }
 
 MaxCardsSkill::MaxCardsSkill(const QString &name)
@@ -711,22 +798,21 @@ DetachEffectSkill::DetachEffectSkill(const QString &skillname, const QString &pi
 
 QStringList DetachEffectSkill::triggerable(TriggerEvent, Room *, ServerPlayer *target, QVariant &data, ServerPlayer * &) const
 {
-    if (target && data.toString() == name)
+    if (target && data.toString().split(":").first() == name)
         return QStringList(objectName());
     return QStringList();
 }
 
-bool DetachEffectSkill::effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &, ServerPlayer *) const
+bool DetachEffectSkill::effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *) const
 {
     if (!pile_name.isEmpty())
         player->clearOnePrivatePile(pile_name);
-    else
-        onSkillDetached(room, player);
 
+    onSkillDetached(room, player, data);
     return false;
 }
 
-void DetachEffectSkill::onSkillDetached(Room *, ServerPlayer *) const
+void DetachEffectSkill::onSkillDetached(Room *, ServerPlayer *, QVariant &) const
 {
 }
 
@@ -764,6 +850,67 @@ bool ArmorSkill::triggerable(const ServerPlayer *target) const
     return target->hasArmorEffect(objectName());
 }
 
+bool ArmorSkill::cost(Room *room, ServerPlayer *target, QVariant &data) const
+{
+    if (target->getArmor() && target->getArmor()->objectName() == objectName())
+        return getFrequency() == Skill::Compulsory || target->askForSkillInvoke(objectName(), data);
+
+    QStringList skill_names;
+    bool show = false;
+    foreach (QString name, Sanguosha->getSkillNames()) {
+        if (Sanguosha->getSkill(name)->inherits("ViewHasSkill")) {
+            const ViewHasSkill *skill = qobject_cast<const ViewHasSkill *>(Sanguosha->getSkill(name));
+            if (skill->ViewHas(target, objectName(), "armor")) {
+                if (target->hasShownSkill(skill)) show = true;
+                if (target->getHeadActivedSkills().contains(skill))
+                    skill_names << "left?" + name;
+                if (target->getDeputyActivedSkills().contains(skill))
+                    skill_names << "right?" + name;
+            }
+        }
+    }
+    if (skill_names.isEmpty()) return false;
+    QString name;
+    bool invoke = false;
+    if (skill_names.length() > 1){
+        SPlayerDataMap map;
+        map.insert(target, skill_names);
+        bool option = show && getFrequency() == Skill::Compulsory;
+        QString answer = room->askForTriggerOrder(target, "armorskill", map, !option, data);
+        if (answer != "cancel") invoke = true;
+        name = answer.split(":").first().split("?").last() + "?" + answer.split(":").last();
+    } else {
+        name = skill_names.first();
+        QString skill_name = name.split("?").last();
+        invoke = target->hasShownSkill(skill_name) && getFrequency() == Skill::Compulsory
+                || target->askForSkillInvoke(target->hasShownSkill(skill_name) ? objectName() : skill_name, data);
+    }
+    if (!invoke) return false;
+
+    QStringList names = room->getTag(objectName() + target->objectName()).toStringList();   //add for player audio
+    names.append(name);
+    room->setTag(objectName() + target->objectName(), names);
+
+    LogMessage log;
+    log.type = "#InvokeSkill";
+    log.from = target;
+    log.arg = objectName();
+    room->sendLog(log);
+
+    target->showSkill(name.split("?").last(), name.split("?").first());
+    return true;
+}
+
+void ArmorSkill::playAudio(const ServerPlayer *target) const
+{
+    Room *room = target->getRoom();
+    QStringList names = room->getTag(objectName() + target->objectName()).toStringList();
+    if (names.isEmpty()) return;
+    room->broadcastSkillInvoke(names.last().split("?").last(), "male", -1, target, names.last().split("?").first());
+    names.removeLast();
+    room->setTag(objectName() + target->objectName(), names);
+}
+
 TreasureSkill::TreasureSkill(const QString &name)
     : TriggerSkill(name)
 {
@@ -779,4 +926,14 @@ bool TreasureSkill::triggerable(const ServerPlayer *target) const
     if (target == NULL)
         return false;
     return target->hasTreasure(objectName());
+}
+
+FixCardSkill::FixCardSkill(const QString &name)
+    : Skill(name, Skill::Compulsory)
+{
+}
+
+ViewHasSkill::ViewHasSkill(const QString &name)
+    : Skill(name, Skill::Compulsory), global(false)
+{
 }

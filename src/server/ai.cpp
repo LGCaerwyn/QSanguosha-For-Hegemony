@@ -240,6 +240,11 @@ int TrustAI::askForCardChosen(ServerPlayer *, const QString &, const QString &, 
     return -1;
 }
 
+QList<int> TrustAI::askForCardsChosen(const QList<ServerPlayer *> &, const QString &, const QString &, int, int, const QList<int> &)
+{
+    return QList<int>();
+}
+
 const Card *TrustAI::askForCard(const QString &pattern, const QString &prompt, const QVariant &data)
 {
     Q_UNUSED(prompt);
@@ -445,6 +450,26 @@ bool LuaAI::getTable(lua_State *L, QList<int> &table)
     for (i = 0; i < len; i++) {
         lua_rawgeti(L, -1, i + 1);
         table << lua_tointeger(L, -1);
+        lua_pop(L, 1);
+    }
+
+    lua_pop(L, 1);
+
+    return true;
+}
+
+bool LuaAI::StringListgetTable(lua_State *L, QStringList &table)
+{
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        return false;
+    }
+
+    size_t len = lua_rawlen(L, -1);
+    size_t i;
+    for (i = 0; i < len; i++) {
+        lua_rawgeti(L, -1, i + 1);
+        table << lua_tostring(L, -1);
         lua_pop(L, 1);
     }
 

@@ -48,6 +48,9 @@
 #include "choosesuitbox.h"
 #include "guhuobox.h"
 #include "cardchoosebox.h"
+#include "pindianbox.h"
+#include "transformation.h"
+#include "lightboxanimation.h"
 
 #include <QPropertyAnimation>
 #include <QParallelAnimationGroup>
@@ -119,6 +122,15 @@ RoomScene::RoomScene(QMainWindow *main_window)
         photos << photo;
         addItem(photo);
         photo->setZValue(-0.5);
+    }
+
+    // create global card boxes
+    for (int i = 0; i < player_count; i++) {
+        PlayerCardBox *cardbox = new PlayerCardBox;
+        card_boxes << cardbox;
+        addItem(cardbox);
+        cardbox->setZValue(-0.5);
+        connect(cardbox, &PlayerCardBox::global_choose, this, &RoomScene::updateGlobalCardBox);
     }
 
     // create table pile
@@ -226,6 +238,15 @@ RoomScene::RoomScene(QMainWindow *main_window)
     connect(ClientInstance, &Client::mirror_cardchoose_finish, m_cardchooseBox, &CardChooseBox::clear);
     connect(ClientInstance, &Client::card_moved_incardchoosebox, this, &RoomScene::cardMovedinCardchooseBox);
 
+    m_pindianBox = new PindianBox;
+    m_pindianBox->hide();
+    addItem(m_pindianBox);
+    m_pindianBox->setZValue(9);
+    m_pindianBox->moveBy(-120, 0);
+    connect(ClientInstance, &Client::startPindian, m_pindianBox, &PindianBox::doPindian);
+    connect(ClientInstance, &Client::onPindianReply, m_pindianBox, &PindianBox::onReply);
+    connect(ClientInstance, &Client::pindianSuccess, this, &RoomScene::playPindianSuccess);
+
     m_chooseGeneralBox = new ChooseGeneralBox;
     m_chooseGeneralBox->hide();
     addItem(m_chooseGeneralBox);
@@ -260,6 +281,11 @@ RoomScene::RoomScene(QMainWindow *main_window)
     m_cardContainer->hide();
     addItem(m_cardContainer);
     m_cardContainer->setZValue(9.0);
+
+    pileContainer = new CardContainer;
+    pileContainer->hide();
+    addItem(pileContainer);
+    pileContainer->setZValue(9.0);
 
     connect(m_cardContainer, &CardContainer::item_chosen, ClientInstance, &Client::onPlayerChooseAG);
     connect(m_cardContainer, &CardContainer::item_gongxined, ClientInstance, &Client::onPlayerReplyGongxin);
@@ -357,6 +383,20 @@ RoomScene::RoomScene(QMainWindow *main_window)
     fill_robots = NULL;
     return_to_start_scene = NULL;
     if (!ServerInfo.ForbidAddingRobot) {
+#ifdef Q_OS_ANDROID
+        int width = G_DASHBOARD_LAYOUT.m_avatarArea.width() * 4;
+        int height = G_DASHBOARD_LAYOUT.m_normalHeight * 2;
+        control_panel = addRect(0, 0, width, height, Qt::NoPen);
+        control_panel->hide();
+
+        add_robot = new Button(tr("Add a robot"), QSizeF(width - 20, height / 3));
+        add_robot->setParentItem(control_panel);
+        add_robot->setPos(0, -add_robot->boundingRect().height() - 10);
+
+        fill_robots = new Button(tr("Fill robots"), QSizeF(width - 20, height / 3));
+        fill_robots->setParentItem(control_panel);
+#else
+
         control_panel = addRect(0, 0, 500, 150, Qt::NoPen);
         control_panel->hide();
 
@@ -368,16 +408,28 @@ RoomScene::RoomScene(QMainWindow *main_window)
         fill_robots = new Button(tr("Fill robots"), 1.0);
         fill_robots->setParentItem(control_panel);
         fill_robots->setTransform(QTransform::fromTranslate(-fill_robots->boundingRect().width() / 2, -fill_robots->boundingRect().height() / 2), true);
+#endif
         connect(add_robot, &Button::clicked, ClientInstance, &Client::addRobot);
         connect(fill_robots, &Button::clicked, ClientInstance, &Client::fillRobots);
         connect(Self, &ClientPlayer::owner_changed, this, &RoomScene::showOwnerButtons);
     } else {
         control_panel = NULL;
     }
+
+#ifdef Q_OS_ANDROID
+    int width = G_DASHBOARD_LAYOUT.m_avatarArea.width() * 4;
+    int height = G_DASHBOARD_LAYOUT.m_normalHeight * 2;
+    return_to_start_scene = new Button(tr("Return to main menu"), QSizeF(width - 20, height / 3));
+    addItem(return_to_start_scene);
+    return_to_start_scene->setZValue(10000);
+#else
+
     return_to_start_scene = new Button(tr("Return to main menu"), 1.0);
+
     addItem(return_to_start_scene);
     return_to_start_scene->setZValue(10000);
     return_to_start_scene->setTransform(QTransform::fromTranslate(-return_to_start_scene->boundingRect().width() / 2, -return_to_start_scene->boundingRect().height() / 2), true);
+#endif
     connect(return_to_start_scene, &Button::clicked, this, &RoomScene::return_to_start);
 
     animations = new EffectAnimation();
@@ -399,22 +451,6 @@ RoomScene::RoomScene(QMainWindow *main_window)
 
     pausing_item->hide();
     pausing_text->hide();
-
-    pindian_box = new Window(tr("pindian"), QSize(255, 200), "image/system/pindian.png");
-    pindian_box->setOpacity(0);
-    pindian_box->setFlag(QGraphicsItem::ItemIsMovable);
-    pindian_box->shift();
-    pindian_box->setZValue(10);
-    pindian_box->keepWhenDisappear();
-    addItem(pindian_box);
-
-    pindian_from_card = NULL;
-    pindian_to_card = NULL;
-#ifndef Q_OS_WINRT
-    _m_animationEngine = new QDeclarativeEngine(this);
-    _m_animationContext = new QDeclarativeContext(_m_animationEngine->rootContext(), this);
-    _m_animationComponent = new QDeclarativeComponent(_m_animationEngine, QUrl::fromLocalFile("ui-script/animation.qml"), this);
-#endif
 }
 
 void RoomScene::handleGameEvent(const QVariant &args)
@@ -452,6 +488,17 @@ void RoomScene::handleGameEvent(const QVariant &args)
             if (photo) photo->setFrame(Photo::S_FRAME_NO_FRAME);
             break;
         }
+        case S_GAME_EVENT_HUASHEN: {
+            ClientPlayer *player = ClientInstance->getPlayer(arg[1].toString());
+            QStringList huashenGenerals = arg[2].toString().split("+");
+            Q_ASSERT(player != NULL);
+            Q_ASSERT(!huashenGenerals.isEmpty());
+            PlayerCardContainer *container = (PlayerCardContainer *)_getGenericCardContainer(Player::PlaceHand, player);
+            container->startHuaShen(huashenGenerals);
+            player->tag["Huashens"] = huashenGenerals;
+            player->changePile("huashencard", false, QList<int>());
+            break;
+        }
         case S_GAME_EVENT_PLAY_EFFECT: {
             QString skillName = arg[1].toString();
             QString category;
@@ -467,7 +514,10 @@ void RoomScene::handleGameEvent(const QVariant &args)
                 QString playerName = arg[4].toString();
                 player = ClientInstance->getPlayer(playerName);
             }
-            Sanguosha->playAudioEffect(G_ROOM_SKIN.getPlayerAudioEffectPath(skillName, category, type, player));
+            QString postion;
+            if (player && arg.size() >= 6 && JsonUtils::isString(arg[5]))
+                postion = arg[5].toString();
+            Sanguosha->playAudioEffect(G_ROOM_SKIN.getPlayerAudioEffectPath(skillName, category, type, player, postion));
             break;
         }
         case S_GAME_EVENT_JUDGE_RESULT: {
@@ -479,11 +529,20 @@ void RoomScene::handleGameEvent(const QVariant &args)
         case S_GAME_EVENT_DETACH_SKILL: {
             QString player_name = arg[1].toString();
             QString skill_name = arg[2].toString();
+            bool head = arg[3].toBool();
 
             ClientPlayer *player = ClientInstance->getPlayer(player_name);
-            player->detachSkill(skill_name);
-            if (player == Self) detachSkill(skill_name);
+            player->detachSkill(skill_name, head);
+            if (player == Self) detachSkill(skill_name, head);
 
+            // stop huashen animation
+            PlayerCardContainer *container = (PlayerCardContainer *)_getGenericCardContainer(Player::PlaceHand, player);
+            if (!player->hasSkill("huashen")) {
+                container->stopHuaShen();
+                player->tag.remove("Huashens");
+                player->changePile("huashencard", false, QList<int>());
+            }
+            container->updateAvatarTooltip();
             break;
         }
         case S_GAME_EVENT_ACQUIRE_SKILL: {
@@ -516,9 +575,10 @@ void RoomScene::handleGameEvent(const QVariant &args)
         case S_GAME_EVENT_LOSE_SKILL: {
             QString player_name = arg[1].toString();
             QString skill_name = arg[2].toString();
+            bool head = arg[3].toBool();
 
             ClientPlayer *player = ClientInstance->getPlayer(player_name);
-            player->loseSkill(skill_name);
+            player->loseSkill(skill_name, head);
 
             PlayerCardContainer *container = qobject_cast<PlayerCardContainer *>(_getGenericCardContainer(Player::PlaceHand, player));
             if (container != NULL)
@@ -542,10 +602,13 @@ void RoomScene::handleGameEvent(const QVariant &args)
 
                 if (Config.EnableAutoPreshow && auto_preshow_available) {
                     const Skill *s = Sanguosha->getSkill(skill);
-                    if (s != NULL && s->canPreshow())
-                        ClientInstance->preshow(skill, true);
+                    if (s != NULL && s->canPreshow()) {
+                        ClientInstance->preshow(skill, true, true);
+                        ClientInstance->preshow(skill, true, false);
+                    }
                 } else {
-                    Self->setSkillPreshowed(skill, showed);
+                    Self->setSkillPreshowed(skill, showed, true);
+                    Self->setSkillPreshowed(skill, showed, false);
                     if (!showed) {
                         foreach (QSanSkillButton *btn, m_skillButtons) {
                             if (btn->getSkill()->objectName() == skill) {
@@ -579,6 +642,9 @@ void RoomScene::handleGameEvent(const QVariant &args)
             bool isSecondaryHero = arg[3].toBool();
             bool sendLog = arg[4].toBool();
             ClientPlayer *player = ClientInstance->getPlayer(playerName);
+            PlayerCardContainer *container = (PlayerCardContainer *)_getGenericCardContainer(Player::PlaceHand, player);
+            container->refresh();
+            if (newHeroName == "anjiang" && player == Self) break;
             const General* oldHero = isSecondaryHero ? player->getGeneral2() : player->getGeneral();
             if (Sanguosha->getGeneral(newHeroName)) {
                 if (isSecondaryHero) {
@@ -600,13 +666,18 @@ void RoomScene::handleGameEvent(const QVariant &args)
                     log_box->appendLog(type, player->objectName(), QStringList(), QString(), newHeroName, arg2);
                 }
             }
-            if (player != Self) break;
             const General* newHero = Sanguosha->getGeneral(newHeroName);
+
             if (oldHero) {
                 foreach (const Skill *skill, oldHero->getVisibleSkills(true, !isSecondaryHero))
-                    detachSkill(skill->objectName());
+                    detachSkill(skill->objectName(), !isSecondaryHero);
+                if (oldHero->hasSkill("huashen")) {
+                    container->stopHuaShen();
+                    player->tag.remove("Huashens");
+                    player->changePile("huashencard", false, QList<int>());
+                }
             }
-
+            if (player != Self) break;
             if (newHero && !player->isDuanchang(!isSecondaryHero)) {
                 foreach (const Skill *skill, newHero->getVisibleSkills(true, !isSecondaryHero))
                     attachSkill(skill->objectName(), !isSecondaryHero);
@@ -635,6 +706,9 @@ void RoomScene::handleGameEvent(const QVariant &args)
                     if (photo) photo->showSkillName(skill_name);
                 }
             }
+            QString skillEmotion = QString("skill/%1").arg(skill_name);
+            if (QFile::exists(skillEmotion))
+                setEmotion(player_name, skillEmotion);
             break;
         }
         case S_GAME_EVENT_PAUSE: {
@@ -652,16 +726,8 @@ void RoomScene::handleGameEvent(const QVariant &args)
             break;
         }
         case S_GAME_EVENT_REVEAL_PINDIAN: {
-            QString from_name = arg[1].toString(), to_name = arg[3].toString();
-            int from_id = arg[2].toInt(), to_id = arg[4].toInt();
-            bool success = arg[5].toBool();
-            pindian_success = success;
-            QString reason = arg[6].toString();
-
-            if (Config.value("EnablePindianBox", true).toBool())
-                showPindianBox(from_name, from_id, to_name, to_id, reason);
-            else
-                setEmotion(from_name, success ? "success" : "no-success");
+            QString who = arg[1].toString();
+            m_pindianBox->doPindianAnimation(who);
         }
         default:
             break;
@@ -673,12 +739,25 @@ QGraphicsItem *RoomScene::createDashboardButtons()
     QGraphicsItem *widget = new QGraphicsPixmapItem(G_ROOM_SKIN.getPixmap(QSanRoomSkin::S_SKIN_KEY_DASHBOARD_BUTTON_SET_BG)
         .scaled(G_DASHBOARD_LAYOUT.m_buttonSetSize));
 
+#ifdef Q_OS_ANDROID
+    ok_button = new QSanButton("platter", "confirm_android", widget);
+    ok_button->setRect(QRect(-650, -100, 150, 80));
+
+    cancel_button = new QSanButton("platter", "cancel_android", widget);
+    cancel_button->setRect(QRect(-450, -100, 150, 80));
+
+    discard_button = new QSanButton("platter", "discard_android", widget);
+    QRect r;
+    r.setSize(G_DASHBOARD_LAYOUT.m_buttonSetSize);
+    discard_button->setRect(r);
+#else
     ok_button = new QSanButton("platter", "confirm", widget);
     ok_button->setRect(G_DASHBOARD_LAYOUT.m_confirmButtonArea);
     cancel_button = new QSanButton("platter", "cancel", widget);
     cancel_button->setRect(G_DASHBOARD_LAYOUT.m_cancelButtonArea);
     discard_button = new QSanButton("platter", "discard", widget);
     discard_button->setRect(G_DASHBOARD_LAYOUT.m_discardButtonArea);
+#endif
     connect(ok_button, &QSanButton::clicked, this, &RoomScene::doOkButton);
     connect(cancel_button, &QSanButton::clicked, this, &RoomScene::doCancelButton);
     connect(discard_button, &QSanButton::clicked, this, &RoomScene::doDiscardButton);
@@ -836,7 +915,11 @@ void RoomScene::onSceneRectChanged(const QRectF &rect)
     _m_infoPlane.setWidth(newRect.width() * _m_roomLayout->m_infoPlaneWidthPercentage);
     _m_infoPlane.moveRight(newRect.right());
     _m_infoPlane.setTop(newRect.top() + _m_roomLayout->m_roleBoxHeight);
+#ifdef Q_OS_ANDROID
+    _m_infoPlane.setBottom(dashboard->y() - _m_roomLayout->m_chatTextBoxHeight - G_DASHBOARD_LAYOUT.m_avatarArea.height());
+#else
     _m_infoPlane.setBottom(dashboard->y() - _m_roomLayout->m_chatTextBoxHeight);
+#endif
     m_rolesBoxBackground = m_rolesBoxBackground.scaled(_m_infoPlane.width(), _m_roomLayout->m_roleBoxHeight);
     m_rolesBox->setPixmap(m_rolesBoxBackground);
     m_rolesBox->setPos(_m_infoPlane.left(), newRect.top());
@@ -995,16 +1078,25 @@ void RoomScene::updateTable()
     dashboard->setFloatingArea(tableBottomBar);
 
     m_tableCenterPos = tableRect.center();
+#ifdef Q_OS_ANDROID
+    if (control_panel)
+        control_panel->setPos(m_tableCenterPos.x() - add_robot->boundingRect().width() / 2, m_tableCenterPos.y() / 4 * 3);
+    return_to_start_scene->setPos(m_tableCenterPos.x() - return_to_start_scene->boundingRect().width() / 2,
+                                  m_tableCenterPos.y() + return_to_start_scene->boundingRect().height() + 10);
+#else
     if (control_panel)
         control_panel->setPos(m_tableCenterPos);
     return_to_start_scene->setPos(m_tableCenterPos + QPointF(0, return_to_start_scene->boundingRect().height() + 10));
+#endif
     m_tablePile->setPos(m_tableCenterPos);
     m_tablePile->setSize(qMax((int)tableRect.width() - _m_roomLayout->m_discardPilePadding * 2,
         _m_roomLayout->m_discardPileMinWidth), _m_commonLayout->m_cardNormalHeight);
     m_tablePile->adjustCards();
     m_cardContainer->setPos(m_tableCenterPos - QPointF(m_cardContainer->boundingRect().width() / 2, m_cardContainer->boundingRect().height() / 2));
+    pileContainer->setPos(m_tableCenterPos - QPointF(pileContainer->boundingRect().width() / 2, pileContainer->boundingRect().height() / 2));
     m_guanxingBox->setPos(m_tableCenterPos - QPointF(m_guanxingBox->boundingRect().width() / 2, m_guanxingBox->boundingRect().height() / 2));
     m_cardchooseBox->setPos(m_tableCenterPos - QPointF(m_cardchooseBox->boundingRect().width() / 2, m_cardchooseBox->boundingRect().height() / 2));
+    m_pindianBox->setPos(m_tableCenterPos - QPointF(m_pindianBox->boundingRect().width() / 2, m_pindianBox->boundingRect().height() / 2));
     m_chooseGeneralBox->setPos(m_tableCenterPos - QPointF(m_chooseGeneralBox->boundingRect().width() / 2, m_chooseGeneralBox->boundingRect().height() / 2));
     m_chooseOptionsBox->setPos(m_tableCenterPos - QPointF(m_chooseOptionsBox->boundingRect().width() / 2, m_chooseOptionsBox->boundingRect().height() / 2));
     m_chooseTriggerOrderBox->setPos(m_tableCenterPos - QPointF(m_chooseTriggerOrderBox->boundingRect().width() / 2, m_chooseTriggerOrderBox->boundingRect().height() / 2));
@@ -1097,9 +1189,11 @@ void RoomScene::arrangeSeats(const QList<const ClientPlayer *> &seats)
     // set item to player mapping
     if (item2player.isEmpty()) {
         item2player.insert(dashboard, Self);
+        connect(dashboard, &Dashboard::global_selected_changed, this, &RoomScene::updateGlobalCardBox);
         connect(dashboard, &Dashboard::selected_changed, this, &RoomScene::updateSelectedTargets);
         foreach (Photo *photo, photos) {
             item2player.insert(photo, photo->getPlayer());
+            connect(photo, &Photo::global_selected_changed, this, &RoomScene::updateGlobalCardBox);
             connect(photo, &Photo::selected_changed, this, &RoomScene::updateSelectedTargets);
             connect(photo, &Photo::enable_changed, this, &RoomScene::onEnabledChange);
         }
@@ -1127,6 +1221,7 @@ void RoomScene::arrangeSeats(const QList<const ClientPlayer *> &seats)
 void RoomScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsScene::mousePressEvent(event);
+
     m_mousePressed = true;
     bool changed = false;
     QPoint point(event->pos().x(), event->pos().y());
@@ -1145,7 +1240,6 @@ void RoomScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 void RoomScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsScene::mouseReleaseEvent(event);
-
     m_mousePressed = false;
 
     if (m_isInDragAndUseMode) {
@@ -1166,15 +1260,12 @@ void RoomScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 void RoomScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
     QGraphicsScene::mouseMoveEvent(event);
-
     if (!Config.EnableSuperDrag || !m_mousePressed)
         return;
-
     QGraphicsObject *obj = static_cast<QGraphicsObject *>(focusItem());
     CardItem *card_item = qobject_cast<CardItem *>(obj);
     if (!card_item || !card_item->isUnderMouse() || !dashboard->hasHandCard(card_item))
         return;
-
     static bool wasOutsideDashboard = false;
     const bool isOutsideDashboard = !dashboard->isUnderMouse()
         || dashboard->isAvatarUnderMouse();
@@ -1238,7 +1329,6 @@ void RoomScene::enableTargets(const Card *card)
     }
 
     selected_targets.clear();
-
     // unset avatar and all photo
     foreach (PlayerCardContainer *item, item2player.keys())
         item->setSelected(false);
@@ -1415,7 +1505,6 @@ void RoomScene::keyReleaseEvent(QKeyEvent *event)
             setChatBoxVisible(!chat_box_widget->isVisible());
             break;
         }
-
         case Qt::Key_S: dashboard->selectCard("slash");  break;
         case Qt::Key_J: dashboard->selectCard("jink"); break;
         case Qt::Key_P: dashboard->selectCard("peach"); break;
@@ -1581,7 +1670,7 @@ void RoomScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     }
 }
 
-void RoomScene::chooseGeneral(const QStringList &generals, const bool single_result)
+void RoomScene::chooseGeneral(const QStringList &generals, const bool single_result, const bool can_convert)
 {
     QApplication::alert(main_window);
     if (!main_window->isActiveWindow())
@@ -1591,7 +1680,7 @@ void RoomScene::chooseGeneral(const QStringList &generals, const bool single_res
         delete m_choiceDialog;
         m_choiceDialog = new FreeChooseDialog(main_window);
     } else {
-        m_chooseGeneralBox->chooseGeneral(generals, false, single_result);
+        m_chooseGeneralBox->chooseGeneral(generals, false, single_result, QString(), NULL, can_convert);
     }
 }
 
@@ -1790,7 +1879,7 @@ GenericCardContainer *RoomScene::_getGenericCardContainer(Player::Place place, P
         return m_tablePile;
     // @todo: AG must be a pile with name rather than simply using the name special...
     else if (player == NULL && place == Player::PlaceSpecial)
-        return m_cardContainer;
+        return pileContainer;
     else if (player == Self)
         return dashboard;
     else if (player != NULL)
@@ -1843,10 +1932,26 @@ void RoomScene::getCards(int moveId, QList<CardsMoveStruct> card_moves)
         m_cardContainer->m_currentPlayer = qobject_cast<ClientPlayer *>(movement.to);
         GenericCardContainer *to_container = _getGenericCardContainer(movement.to_place, movement.to);
         QList<CardItem *> cards = _m_cardsMoveStash[moveId][count];
+        CardMoveReason reason = movement.reason;
         count++;
         for (int j = 0; j < cards.size(); j++) {
             CardItem *card = cards[j];
             card->setFlag(QGraphicsItem::ItemIsMovable, false);
+            if (!reason.m_skillName.isEmpty() && movement.from && movement.to_place != Player::PlaceHand && movement.to_place != Player::PlaceSpecial
+                    && movement.to_place != Player::PlaceEquip && movement.to_place != Player::PlaceDelayedTrick) {
+                ClientPlayer *target = ClientInstance->getPlayer(movement.from->objectName());
+                if (!reason.m_playerId.isEmpty() && reason.m_playerId != movement.from->objectName()) target = ClientInstance->getPlayer(reason.m_playerId);
+                if (!reason.m_eventName.isEmpty() && reason.m_eventName == target->getActualGeneral1Name()
+                        || reason.m_eventName == target->getActualGeneral2Name())
+                    card->showAvatar(reason.m_eventName == target->getActualGeneral1Name() ? target->getActualGeneral1() : target->getActualGeneral2(), reason.m_skillName);
+                else if (target->hasSkill(reason.m_skillName) && !target->getSkillList().contains(Sanguosha->getSkill(reason.m_skillName)))
+                    card->showAvatar(target->hasShownGeneral1() ? target->getGeneral() : target->getGeneral2(), reason.m_skillName);
+                else if (target->inHeadSkills(reason.m_skillName) || (target->getActualGeneral1() ? target->getActualGeneral1()->hasSkill(reason.m_skillName) : NULL))
+                    card->showAvatar(target->getActualGeneral1(), reason.m_skillName);
+                else if (target->inDeputySkills(reason.m_skillName) || (target->getActualGeneral2() ? target->getActualGeneral2()->hasSkill(reason.m_skillName) : NULL))
+                    card->showAvatar(target->getActualGeneral2(), reason.m_skillName);
+            }
+
             int card_id = card->getId();
             if (!card_moves[i].card_ids.contains(card_id)) {
                 card->setVisible(false);
@@ -1858,6 +1963,8 @@ void RoomScene::getCards(int moveId, QList<CardsMoveStruct> card_moves)
             }
             card->setFootnote(_translateMovement(movement));
             card->hideFootnote();
+            if (Self->hasFlag("marshalling") && movement.to_place == Player::PlaceHand && movement.to->objectName() == Self->objectName())
+                card->setOpacity(1);
         }
         bringToFront(to_container);
         to_container->addCardItems(cards, movement);
@@ -1907,7 +2014,7 @@ QString RoomScene::_translateMovement(const CardsMoveStruct &move)
 
     QString result(playerName + targetName);
     result.append(Sanguosha->translate(reason.m_eventName));
-    result.append(Sanguosha->translate(reason.m_skillName));
+    //result.append(Sanguosha->translate(reason.m_skillName));
     if ((reason.m_reason & CardMoveReason::S_MASK_BASIC_REASON) == CardMoveReason::S_REASON_USE && reason.m_skillName.isEmpty()) {
         result.append(Sanguosha->translate("use"));
     } else if ((reason.m_reason & CardMoveReason::S_MASK_BASIC_REASON) == CardMoveReason::S_REASON_RESPONSE) {
@@ -2141,11 +2248,17 @@ void RoomScene::acquireSkill(const ClientPlayer *player, const QString &skill_na
 
 void RoomScene::updateSkillButtons()
 {
-    foreach (const Skill *skill, Self->getVisibleSkillList()) {
+    foreach (const Skill *skill, Self->getHeadSkillList(true, true)) {
         if (Self->isDuanchang(Self->inHeadSkills(skill->objectName())))
             continue;
 
-        addSkillButton(skill);
+        addSkillButton(skill, true);
+    }
+    foreach (const Skill *skill, Self->getDeputySkillList(true, true)) {
+        if (Self->isDuanchang(Self->inDeputySkills(skill->objectName())))
+            continue;
+
+        addSkillButton(skill, false);
     }
 
     // Do not disable all skill buttons for we need to preshow some skills
@@ -2154,10 +2267,11 @@ void RoomScene::updateSkillButtons()
 
     foreach (QSanSkillButton *button, m_skillButtons) {
         const Skill *skill = button->getSkill();
+        bool head = button->objectName() == "left";
         button->setEnabled(skill->canPreshow()
             && !Self->hasShownSkill(skill));
-        if (skill->canPreshow() && !Self->hasShownSkill(skill)) {
-            if (Self->hasPreshowedSkill(skill->objectName()))
+        if (skill->canPreshow() && Self->ownSkill(skill) && (head ? !Self->hasShownGeneral1() : !Self->hasShownGeneral2())) {
+            if (Self->hasPreshowedSkill(skill->objectName(), head))
                 button->setState(QSanButton::S_STATE_DISABLED);
             else
                 button->setState(QSanButton::S_STATE_CANPRESHOW);
@@ -2240,6 +2354,14 @@ void RoomScene::useSelectedCard()
             prompt_box->disappear();
             break;
         }
+        case Client::GlobalCardChosen: {
+            enableTargets(NULL);
+            foreach (PlayerCardBox *box, card_boxes)
+                box->clear();
+            ClientInstance->onPlayerChooseCards(selected_ids);
+            prompt_box->disappear();
+            break;
+        }
         case Client::AskForYiji: {
             const Card *card = dashboard->getPendingCard();
             if (card) {
@@ -2309,18 +2431,20 @@ void RoomScene::cancelViewAsSkill()
     updateStatus(status, status);
 }
 
-void RoomScene::highlightSkillButton(const QString &skillName, const CardUseStruct::CardUseReason reason, const QString &pattern)
+void RoomScene::highlightSkillButton(const QString &skillName, const CardUseStruct::CardUseReason reason, const QString &pattern, const QString &head)
 {
     const bool isViewAsSkill = reason != CardUseStruct::CARD_USE_REASON_UNKNOWN && !pattern.isEmpty();
     if (Self->hasSkill(skillName, true)) {
         foreach (QSanSkillButton *button, m_skillButtons) {
             Q_ASSERT(button != NULL);
+            if (!head.isEmpty() && button->objectName() != head) continue;
             if (isViewAsSkill) {
                 const ViewAsSkill *vsSkill = button->getViewAsSkill();
                 if (vsSkill != NULL && vsSkill->objectName() == skillName
                     && vsSkill->isAvailable(Self, reason, pattern)) {
                     button->setEnabled(true);
                     button->setState(QSanButton::S_STATE_DOWN);
+                    button->skill_activated();
                     break;
                 }
             } else {
@@ -2416,6 +2540,19 @@ void RoomScene::doTimeout()
             ClientInstance->onPlayerChoosePlayer(null);
             dashboard->stopPending();
             prompt_box->disappear();
+            dashboard->highlightEquip(ClientInstance->skill_name, false);
+            break;
+        }
+        case Client::GlobalCardChosen: {
+            enableTargets(NULL);
+            foreach (PlayerCardBox *box, card_boxes)
+                box->clear();
+            if (ok_button->isEnabled())
+                ok_button->click();
+            else
+                ClientInstance->onPlayerChooseCards(QList<int>());
+            prompt_box->disappear();
+            dashboard->highlightEquip(ClientInstance->skill_name, false);
             break;
         }
         case Client::AskForAG: {
@@ -2500,7 +2637,13 @@ void RoomScene::updateStatus(Client::Status oldStatus, Client::Status newStatus)
             } else if (newStatus == Client::Playing) {
                 reason = CardUseStruct::CARD_USE_REASON_PLAY;
             }
-            button->setEnabled(vsSkill->isAvailable(Self, reason, pattern) && !pattern.endsWith("!"));
+            if (!ClientInstance->getSkillToHighLight().isEmpty() && pattern.startsWith("@@"))
+                if (ClientInstance->getSkillToHighLight() == button->objectName())
+                    button->setEnabled(vsSkill->isAvailable(Self, reason, pattern) && !pattern.endsWith("!"));
+                else
+                    button->setEnabled(false);
+            else
+                button->setEnabled(vsSkill->isAvailable(Self, reason, pattern) && !pattern.endsWith("!"));
         } else {
             const Skill *skill = button->getSkill();
             if (skill->getFrequency() == Skill::Wake)
@@ -2605,7 +2748,7 @@ void RoomScene::updateStatus(Client::Status oldStatus, Client::Status newStatus)
                         ClientInstance->onPlayerResponseCard(NULL);
                         break;
                     }
-                    highlightSkillButton(skill_name, reason, pattern);
+                    highlightSkillButton(skill_name, reason, pattern, ClientInstance->getSkillToHighLight());
                     dashboard->startPending(skill);
                     if (skill->inherits("OneCardViewAsSkill") && Config.EnableIntellectualSelection)
                         dashboard->selectOnlyCard();
@@ -2666,7 +2809,7 @@ void RoomScene::updateStatus(Client::Status oldStatus, Client::Status newStatus)
             discard_skill->setMinNum(ClientInstance->min_num);
             discard_skill->setIncludeEquip(ClientInstance->m_canDiscardEquip);
             discard_skill->setIsDiscard(true);
-            highlightSkillButton(ClientInstance->discard_reason);
+            highlightSkillButton(ClientInstance->discard_reason, CardUseStruct::CARD_USE_REASON_UNKNOWN, QString(), ClientInstance->getSkillToHighLight());
             dashboard->startPending(discard_skill);
             break;
         }
@@ -2678,7 +2821,7 @@ void RoomScene::updateStatus(Client::Status oldStatus, Client::Status newStatus)
             discard_button->setEnabled(false);
             exchange_skill->initialize(ClientInstance->exchange_max, ClientInstance->exchange_min,
                 ClientInstance->exchange_expand_pile, ClientInstance->exchange_pattern);
-            highlightSkillButton(ClientInstance->exchange_reason);
+            highlightSkillButton(ClientInstance->exchange_reason, CardUseStruct::CARD_USE_REASON_UNKNOWN, QString(), ClientInstance->getSkillToHighLight());
             dashboard->startPending(exchange_skill);
             break;
         }
@@ -2695,7 +2838,7 @@ void RoomScene::updateStatus(Client::Status oldStatus, Client::Status newStatus)
         case Client::AskForSkillInvoke: {
             QString skill_name = ClientInstance->getSkillNameToInvoke();
             dashboard->highlightEquip(skill_name, true);
-            highlightSkillButton(skill_name);
+            highlightSkillButton(skill_name, CardUseStruct::CARD_USE_REASON_UNKNOWN, QString(), ClientInstance->getSkillToHighLight());
             showPromptBox();
             ok_button->setEnabled(!ClientInstance->getSkillNameToInvoke().endsWith("!"));
             cancel_button->setEnabled(true);
@@ -2703,6 +2846,9 @@ void RoomScene::updateStatus(Client::Status oldStatus, Client::Status newStatus)
             break;
         }
         case Client::AskForPlayerChoose: {
+            QString skill_name = ClientInstance->getSkillNameToInvoke();
+            dashboard->highlightEquip(skill_name, true);
+            highlightSkillButton(skill_name, CardUseStruct::CARD_USE_REASON_UNKNOWN, QString(), ClientInstance->getSkillToHighLight());
             showPromptBox();
 
             ok_button->setEnabled(false);
@@ -2711,6 +2857,40 @@ void RoomScene::updateStatus(Client::Status oldStatus, Client::Status newStatus)
 
             choose_skill->setPlayerNames(ClientInstance->players_to_choose, ClientInstance->choose_max_num, ClientInstance->choose_min_num);
             dashboard->startPending(choose_skill);
+
+            break;
+        }
+        case Client::GlobalCardChosen: {
+            QString skill_name = ClientInstance->getSkillNameToInvoke();
+            dashboard->highlightEquip(skill_name, true);
+            highlightSkillButton(skill_name, CardUseStruct::CARD_USE_REASON_UNKNOWN, QString(), ClientInstance->getSkillToHighLight());
+            showPromptBox();
+
+            ok_button->setEnabled(false);
+            cancel_button->setEnabled(ClientInstance->m_isDiscardActionRefusable);
+            discard_button->setEnabled(false);
+
+            QStringList targets = ClientInstance->players_to_choose;
+            global_targets.clear();
+            selected_ids.clear();
+            selected_targets_ids.clear();
+            for (int i = 0; i < targets.length(); i++) {
+                card_boxes[i]->globalchooseCard(ClientInstance->getPlayer(targets.at(i)), skill_name, ClientInstance->skill_name,
+                    ClientInstance->handcard_visible, ClientInstance->disabled_ids, ClientInstance->targets_cards.value(targets.at(i)));
+                if (!card_boxes[i]->items.isEmpty()) global_targets << card_boxes[i]->player;
+            }
+
+            foreach (PlayerCardContainer *item, item2player.keys()) {
+                const ClientPlayer *target = item2player.value(item, NULL);
+                item->setMaxVotes(1);
+                item->setFlag(QGraphicsItem::ItemIsSelectable, true);
+                if (global_targets.length() == 1 && target == global_targets.first()) {
+                    item->setSelected(true);
+                    updateGlobalCardBox(target);
+                }
+                if (!global_targets.contains(target))
+                    item->setEnabled(false);
+            }
 
             break;
         }
@@ -2742,7 +2922,7 @@ void RoomScene::updateStatus(Client::Status oldStatus, Client::Status newStatus)
             ok_button->setEnabled(ClientInstance->m_isDiscardActionRefusable);
             cancel_button->setEnabled(ClientInstance->m_canDiscardEquip);
             discard_button->setEnabled(false);
-            highlightSkillButton(ClientInstance->skill_name);
+            highlightSkillButton(ClientInstance->skill_name, CardUseStruct::CARD_USE_REASON_UNKNOWN, QString(), ClientInstance->getSkillToHighLight());
             break;
         }
         case Client::AskForGuanxing:
@@ -2767,7 +2947,8 @@ void RoomScene::updateStatus(Client::Status oldStatus, Client::Status newStatus)
         }
     }
     if (newStatus != oldStatus) {
-        _cancelAllFocus();
+        if (!ClientInstance->_m_race) _cancelAllFocus();
+
         if (newStatus != Client::Playing && newStatus != Client::NotActive)
             QApplication::alert(QApplication::focusWidget());
     }
@@ -2794,6 +2975,13 @@ void RoomScene::cardMovedinCardchooseBox(const bool enable)
     }
 }
 
+void RoomScene::playPindianSuccess(int type, int index)
+{
+    if (!m_pindianBox->isVisible()) return;
+    setEmotion(m_pindianBox->getRequestor(), type == 1 ? "success" : "no-success");
+    m_pindianBox->playSuccess(type, index);
+}
+
 void RoomScene::onSkillDeactivated()
 {
     const ViewAsSkill *current = dashboard->currentSkill();
@@ -2818,7 +3006,11 @@ void RoomScene::onSkillActivated()
             current_guhuo_box->clear();
         dashboard->startPending(skill);
         //ok_button->setEnabled(false);
-        cancel_button->setEnabled(true);
+        QString pattern = Sanguosha->currentRoomState()->getCurrentCardUsePattern();
+        if (pattern.endsWith("!"))
+            cancel_button->setEnabled(false);
+        else
+            cancel_button->setEnabled(true);
 
         const Card *card = dashboard->getPendingCard();
         if (card && card->targetFixed() && card->isAvailable(Self)) {
@@ -2853,6 +3045,11 @@ void RoomScene::doOkButton()
     if (!ok_button->isEnabled()) return;
     if (m_cardContainer->retained()) m_cardContainer->clear();
     useSelectedCard();
+}
+
+void RoomScene::resetButton()
+{
+    ok_button->setEnabled(false);
 }
 
 void RoomScene::doCancelButton()
@@ -2936,9 +3133,19 @@ void RoomScene::doCancelButton()
             break;
         }
         case Client::AskForPlayerChoose: {
+            dashboard->highlightEquip(ClientInstance->skill_name, false);
             dashboard->stopPending();
             QList<const Player *> null;
             ClientInstance->onPlayerChoosePlayer(null);
+            prompt_box->disappear();
+            break;
+        }
+        case Client::GlobalCardChosen: {
+            enableTargets(NULL);
+            foreach (PlayerCardBox *box, card_boxes)
+                box->clear();
+            dashboard->highlightEquip(ClientInstance->skill_name, false);
+            ClientInstance->onPlayerChooseCards(QList<int>());
             prompt_box->disappear();
             break;
         }
@@ -3158,7 +3365,12 @@ void RoomScene::onGameOver()
 
 void RoomScene::addRestartButton(QDialog *dialog)
 {
+#ifdef Q_OS_ANDROID
+    dialog->resize(sceneRect().width(), sceneRect().height());
+    dialog->setStyleSheet("background-color: #F0FFF0; color: black;");
+#else
     dialog->resize(main_window->width() / 2, dialog->height());
+#endif
 
     QPushButton *restartButton = new QPushButton(tr("Restart Game"));
     QPushButton *returnButton = new QPushButton(tr("Return to main menu"));
@@ -3542,6 +3754,13 @@ void RoomScene::killPlayer(const QString &who)
 {
     const General *general = NULL;
     m_roomMutex.lock();
+
+    ClientPlayer *player = ClientInstance->getPlayer(who);
+    if (player) {
+        PlayerCardContainer *container = (PlayerCardContainer *)_getGenericCardContainer(Player::PlaceHand, player);
+        container->stopHuaShen();
+    }
+
     if (who == Self->objectName()) {
         dashboard->killPlayer();
         dashboard->update();
@@ -3596,6 +3815,7 @@ void RoomScene::takeAmazingGrace(ClientPlayer *taker, int card_id, bool move_car
     m_cardContainer->m_currentPlayer = taker;
     CardItem *copy = m_cardContainer->removeCardItems(card_ids, Player::PlaceHand).first();
     if (copy == NULL) return;
+    if (!m_cardContainer->isVisible()) return;
 
     QList<CardItem *> items;
     items << copy;
@@ -3676,7 +3896,7 @@ void RoomScene::attachSkill(const QString &skill_name, const bool &head)
         addSkillButton(skill, head);
 }
 
-void RoomScene::detachSkill(const QString &skill_name)
+void RoomScene::detachSkill(const QString &skill_name, bool head)
 {
     // for shuangxiong { Client::updateProperty(const Json::Value &) }
     // this is an EXTREMELY DIRTY HACK!!! for we should prevent shuangxiong skill button been removed temporily by duanchang
@@ -3684,11 +3904,11 @@ void RoomScene::detachSkill(const QString &skill_name)
         && skill_name == "shuangxiong" && Self->getPhase() <= Player::Discard) {
         Self->setFlags("shuangxiong_postpone");
     } else {
-        QSanSkillButton *btn = dashboard->removeSkillButton(skill_name);
+        QSanSkillButton *btn = dashboard->removeSkillButton(skill_name, head);
         if (btn == NULL) return;    //be care LordSkill and SPConvertSkill
         m_skillButtons.removeAll(btn);
         btn->deleteLater();
-        if (guhuo_items[skill_name] != NULL)
+        if (guhuo_items[skill_name] != NULL && !Self->hasSkill(skill_name))
             guhuo_items[skill_name]->deleteLater(); //added by Xusine for GuhuoBox
     }
 }
@@ -3771,6 +3991,41 @@ void RoomScene::doGongxin(const QList<int> &card_ids, bool enable_heart, QList<i
         m_cardContainer->addConfirmButton();
 }
 
+void RoomScene::showPile(const QList<int> &card_ids, const QString &name, const ClientPlayer *target)
+{
+    pileContainer->clear();
+    bringToFront(pileContainer);
+    pileContainer->setObjectName(name);
+    if (name == "huashencard" && target->hasSkill("huashen")) {
+        QStringList huashens = target->tag["Huashens"].toStringList();
+        QList<CardItem *> generals;
+        foreach (QString arg, huashens) {
+            CardItem *item = new CardItem(arg);
+            addItem(item);
+            item->setParentItem(pileContainer);
+            generals.append(item);
+        }
+        pileContainer->fillGeneralCards(generals);
+    } else {
+        pileContainer->fillCards(card_ids);
+    }
+    pileContainer->setPos(m_tableCenterPos - QPointF(pileContainer->boundingRect().width() / 2, pileContainer->boundingRect().height() / 2));
+    pileContainer->show();
+}
+
+QString RoomScene::getCurrentShownPileName()
+{
+    if (pileContainer->isVisible())
+        return pileContainer->objectName();
+    else
+        return NULL;
+}
+
+void RoomScene::hidePile()
+{
+    pileContainer->clear();
+}
+
 void RoomScene::showOwnerButtons(bool owner)
 {
     if (control_panel && !game_started)
@@ -3850,8 +4105,10 @@ void RoomScene::freeze()
     stopHeroSkinChangingAnimations();
 
     dashboard->setEnabled(false);
+    dashboard->stopHuaShen();
     foreach (Photo *photo, photos) {
         photo->hideProgressBar();
+        photo->stopHuaShen();
         photo->setEnabled(false);
     }
     item2player.clear();
@@ -3933,7 +4190,7 @@ void RoomScene::setEmotion(const QString &who, const QString &emotion, bool perm
 void RoomScene::showSkillInvocation(const QString &who, const QString &skill_name)
 {
     const ClientPlayer *player = ClientInstance->findChild<const ClientPlayer *>(who);
-    if (!player->ownSkill(skill_name) && !player->hasEquipSkill(skill_name)) return;
+    if (!player->hasSkill(skill_name) && !player->hasEquipSkill(skill_name)) return;
     const Skill *skill = Sanguosha->getSkill(skill_name);
     if (skill && (skill->inherits("SPConvertSkill") || !skill->isVisible())) return;
     QString type = "#InvokeSkill";
@@ -3944,17 +4201,23 @@ void RoomScene::showSkillInvocation(const QString &who, const QString &skill_nam
 
 void RoomScene::removeLightBox()
 {
-    PixmapAnimation *pma = qobject_cast<PixmapAnimation *>(sender());
-    if (pma) {
-        removeItem(pma->parentItem());
+    LightboxAnimation *lightbox = qobject_cast<LightboxAnimation *>(sender());
+    if (lightbox) {
+        removeItem(lightbox);
+        lightbox->deleteLater();
     } else {
-        QPropertyAnimation *animation = qobject_cast<QPropertyAnimation *>(sender());
-        QGraphicsTextItem *line = qobject_cast<QGraphicsTextItem *>(animation->targetObject());
-        if (line) {
-            removeItem(line->parentItem());
+        PixmapAnimation *pma = qobject_cast<PixmapAnimation *>(sender());
+        if (pma) {
+            removeItem(pma->parentItem());
         } else {
-            QSanSelectableItem *line = qobject_cast<QSanSelectableItem *>(animation->targetObject());
-            removeItem(line->parentItem());
+            QPropertyAnimation *animation = qobject_cast<QPropertyAnimation *>(sender());
+            QGraphicsTextItem *line = qobject_cast<QGraphicsTextItem *>(animation->targetObject());
+            if (line) {
+                removeItem(line->parentItem());
+            } else {
+                QSanSelectableItem *line = qobject_cast<QSanSelectableItem *>(animation->targetObject());
+                removeItem(line->parentItem());
+            }
         }
     }
 }
@@ -4068,22 +4331,14 @@ void RoomScene::doLightboxAnimation(const QString &, const QStringList &args)
             connect(pma, &PixmapAnimation::finished, this, &RoomScene::removeLightBox);
         }
     }
-#ifndef Q_OS_WINRT
     else if (word.startsWith("skill=")) {
         const QString hero = word.mid(6);
         const QString skill = args.value(1, QString());
-
-        _m_animationContext->setContextProperty("sceneWidth", sceneRect().width());
-        _m_animationContext->setContextProperty("sceneHeight", sceneRect().height());
-        _m_animationContext->setContextProperty("tableWidth", m_tableCenterPos.x() * 2);
-        _m_animationContext->setContextProperty("hero", hero);
-        _m_animationContext->setContextProperty("skill", Sanguosha->translate(skill));
-        QGraphicsObject *object = qobject_cast<QGraphicsObject *>(_m_animationComponent->create(_m_animationContext));
-        connect(object, SIGNAL(animationCompleted()), object, SLOT(deleteLater())); // cannot replace?
-        addItem(object);
-        bringToFront(object);
+        LightboxAnimation *animation = new LightboxAnimation(hero, skill, rect);
+        animation->setZValue(20001.0);
+        addItem(animation);
+        connect(animation, &LightboxAnimation::finished, this, &RoomScene::removeLightBox);
     }
-#endif
     else {
         QFont font = Config.BigFont;
         if (reset_size) font.setPixelSize(100);
@@ -4114,26 +4369,32 @@ void RoomScene::doHuashen(const QString &, const QStringList &args)
 
     QStringList hargs = args;
     QString name = hargs.first();
-    hargs.removeOne(name);
-    hargs = hargs.first().split(":");
+    QStringList general_names = hargs.last().split(":");
     ClientPlayer *player = ClientInstance->getPlayer(name);
-
     QList<CardItem *> generals;
-
-    foreach (QString arg, hargs) {
+    if (general_names.first().startsWith("-")) {
+        PlayerCardContainer *container = (PlayerCardContainer *)_getGenericCardContainer(Player::PlaceHand, player);
+        container->stopHuaShen();
+        player->tag.remove("Huashens");
+        return;
+    }
+    QStringList huashen_list = player->tag["Huashens"].toStringList();
+    foreach (QString arg, general_names) {
+        huashen_list << arg;
         CardItem *item = new CardItem(arg);
         item->setPos(this->m_tableCenterPos);
         addItem(item);
         generals.append(item);
     }
+    player->tag["Huashens"] = huashen_list;
     CardsMoveStruct move;
     move.to = player;
     move.from_place = Player::DrawPile;
     move.to_place = Player::PlaceSpecial;
-    move.to_pile_name = "huashen";
 
     GenericCardContainer *container = _getGenericCardContainer(Player::PlaceHand, player);
     container->addCardItems(generals, move);
+    player->changePile("huashencard", false, QList<int>());
 }
 
 void RoomScene::showIndicator(const QString &from, const QString &to)
@@ -4188,6 +4449,7 @@ void RoomScene::doAnimation(int name, const QStringList &args)
         anim_name[S_ANIMATE_LIGHTNING] = "lightning";
 
         anim_name[S_ANIMATE_LIGHTBOX] = "lightbox";
+        anim_name[S_ANIMATE_HUASHEN] = "huashen";
         anim_name[S_ANIMATE_INDICATE] = "indicate";
     }
 
@@ -4234,11 +4496,8 @@ void RoomScene::bringToFront(QGraphicsItem *front_item)
         _m_last_front_item->setZValue(_m_last_front_ZValue);
     _m_last_front_item = front_item;
     _m_last_front_ZValue = front_item->zValue();
-    if (pindian_box && front_item != pindian_box && pindian_box->isVisible()) {
-        m_zValueMutex.unlock();
-        bringToFront(pindian_box);
-        m_zValueMutex.lock();
-        front_item->setZValue(9999);
+    if (m_pindianBox && front_item != m_pindianBox && front_item != prompt_box && m_pindianBox->isVisible()) {
+        front_item->setZValue(8);
     } else {
         front_item->setZValue(10000);
     }
@@ -4398,57 +4657,6 @@ void RoomScene::finishArrange()
     ClientInstance->setStatus(Client::NotActive);
 }
 
-void RoomScene::showPindianBox(const QString &from_name, int from_id, const QString &to_name, int to_id, const QString &reason)
-{
-    pindian_box->setOpacity(0.0);
-    pindian_box->setPos(m_tableCenterPos);
-    if (!reason.isEmpty())
-        pindian_box->setTitle(Sanguosha->translate(reason));
-    else
-        pindian_box->setTitle(tr("pindian"));
-
-    if (pindian_from_card) {
-        delete pindian_from_card;
-        pindian_from_card = NULL;
-    }
-    if (pindian_to_card) {
-        delete pindian_to_card;
-        pindian_to_card = NULL;
-    }
-
-    pindian_from_card = new CardItem(Sanguosha->getCard(from_id));
-    pindian_from_card->setParentItem(pindian_box);
-    pindian_from_card->setPos(QPointF(28 + pindian_from_card->boundingRect().width() / 2,
-        44 + pindian_from_card->boundingRect().height() / 2));
-    pindian_from_card->setFlag(QGraphicsItem::ItemIsMovable, false);
-    pindian_from_card->setHomePos(pindian_from_card->pos());
-    pindian_from_card->setFootnote(ClientInstance->getPlayerName(from_name));
-
-    pindian_to_card = new CardItem(Sanguosha->getCard(to_id));
-    pindian_to_card->setParentItem(pindian_box);
-    pindian_to_card->setPos(QPointF(126 + pindian_to_card->boundingRect().width() / 2,
-        44 + pindian_to_card->boundingRect().height() / 2));
-    pindian_to_card->setFlag(QGraphicsItem::ItemIsMovable, false);
-    pindian_to_card->setHomePos(pindian_to_card->pos());
-    pindian_to_card->setFootnote(ClientInstance->getPlayerName(to_name));
-
-    bringToFront(pindian_box);
-    pindian_box->appear();
-    QTimer::singleShot(500, this, SLOT(doPindianAnimation()));
-}
-
-void RoomScene::doPindianAnimation()
-{
-    if (!pindian_box->isVisible() || !pindian_from_card || !pindian_to_card) return;
-
-    QString emotion = pindian_success ? "success" : "no-success";
-    PixmapAnimation *pma = PixmapAnimation::GetPixmapAnimation(pindian_from_card, emotion);
-    if (pma)
-        connect(pma, &PixmapAnimation::finished, pindian_box, &Window::disappear);
-    else
-        pindian_box->disappear();
-}
-
 void RoomScene::updateRolesBox()
 {
     double centerX = m_rolesBox->boundingRect().width() / 2;
@@ -4520,4 +4728,68 @@ void RoomScene::updateHandcardNum()
     foreach (Photo *p, photos) {
         p->updateHandcardNum();
     }
+}
+
+void RoomScene::updateGlobalCardBox(const ClientPlayer *player, int id)
+{
+    prompt_box->disappear();
+    ok_button->setEnabled(false);
+    foreach (PlayerCardContainer *item, item2player.keys()) {
+        const ClientPlayer *target = item2player.value(item, NULL);
+        if (global_targets.contains(target)) item->setEnabled(true);
+        if (target == player) item->setSelected(true);
+    }
+    foreach (PlayerCardBox *box, card_boxes)
+        box->reset();
+
+    if (id == -1) {
+        foreach (PlayerCardBox *box, card_boxes)
+            box->hide();
+
+        foreach (PlayerCardBox *box, card_boxes) {
+            if (box->player == player) {
+                box->show();
+                GraphicsBox::moveToCenter(box);
+                bringToFront(box);
+            }
+        }
+    } else {
+        if (!selected_ids.contains(id)) {
+            selected_ids.append(id);
+            selected_targets_ids.insert(id, player);
+        } else {
+            selected_ids.removeAll(id);
+            selected_targets_ids.remove(id);
+        }
+    }
+
+    foreach (PlayerCardContainer *item, item2player.keys()) {
+        const ClientPlayer *target = item2player.value(item, NULL);
+        if (target != player) item->setSelected(false);
+        if (!global_targets.contains(target)) item->setEnabled(false);
+    }
+
+    int type = ClientInstance->type;
+    QList<const ClientPlayer *> targets;
+    foreach (const int &key, selected_targets_ids.keys())
+        foreach (const ClientPlayer *p, selected_targets_ids.values(key))
+            if (!targets.contains(p)) targets << p;
+
+    if (type == 0)
+        foreach (PlayerCardBox *box, card_boxes)
+            if (targets.contains(box->player)) box->setfalse();
+
+    if (selected_ids.length() >= ClientInstance->choose_max_num && ClientInstance->choose_max_num > 0) {
+        foreach (PlayerCardBox *box, card_boxes)
+            box->setfalse();
+
+        foreach (PlayerCardContainer *item, item2player.keys()) {
+            const ClientPlayer *target = item2player.value(item, NULL);
+            if (!targets.contains(target))
+                 item->setEnabled(false);
+        }
+    }
+    if (selected_ids.length() > 0 && (selected_ids.length() <= ClientInstance->choose_max_num || ClientInstance->choose_max_num == 0)
+            && (selected_ids.length() >= ClientInstance->choose_min_num || ClientInstance->choose_min_num == 0))
+        ok_button->setEnabled(true);
 }

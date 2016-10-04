@@ -26,13 +26,16 @@
 #include "roomscene.h"
 #include "button.h"
 #include "graphicsbox.h"
+#include "timedprogressbar.h"
 
 #include <QGraphicsScene>
 #include <QGraphicsSceneMouseEvent>
 
+using namespace QSanProtocol;
+
 CardContainer::CardContainer()
     : confirm_button(new Button(tr("confirm"), 0.6)),
-    scene_width(0), itemCount(0)
+    scene_width(0), itemCount(0), progressBar(NULL)
 {
     confirm_button->setParentItem(this);
     confirm_button->hide();
@@ -83,7 +86,7 @@ QRectF CardContainer::boundingRect() const
         width = (card_width + cardInterval) * ((itemCount + 1) / 2) - cardInterval + 50;
         one_row = false;
     }
-    int height = (one_row ? 1 : 2) * card_height + 90 + (one_row ? 0 : cardInterval);
+    int height = (one_row ? 1 : 2) * card_height + 90 + (one_row ? 0 : cardInterval) + 20;
 
     return QRectF(0, 0, width, height);
 }
@@ -153,6 +156,70 @@ void CardContainer::fillCards(const QList<int> &card_ids, const QList<int> &disa
         item->show();
         ids << item->getId();
     }
+    confirm_button->setPos(boundingRect().center().x() - confirm_button->boundingRect().width() / 2, boundingRect().height() - 60);
+}
+
+void CardContainer::fillGeneralCards(const QList<CardItem *> &card_item, const QList<CardItem *> &disabled_item)
+{
+    if (card_item == items)
+        return;
+
+    QList<CardItem *> card_items = card_item;
+    if (card_items.isEmpty() && items.isEmpty())
+        return;
+    else if (card_item.isEmpty() && !items.isEmpty()) {
+        card_items = items;
+        items.clear();
+    } else if (!items.isEmpty()) {
+        retained_stack.push(retained());
+        items_stack.push(items);
+        foreach(CardItem *item, items)
+            item->hide();
+        items.clear();
+    }
+
+    scene_width = RoomSceneInstance->sceneRect().width();
+    confirm_button->hide();
+
+    items.append(card_items);
+    itemCount = items.length();
+    prepareGeometryChange();
+
+    int card_width = G_COMMON_LAYOUT.m_cardNormalWidth;
+    int card_height = G_COMMON_LAYOUT.m_cardNormalHeight;
+    bool one_row = true;
+    int width = (card_width + cardInterval) * itemCount - cardInterval + 50;
+    if (width * 1.5 > scene_width) {
+        width = (card_width + cardInterval) * ((itemCount + 1) / 2) - cardInterval + 50;
+        one_row = false;
+    }
+    int first_row = one_row ? itemCount : (itemCount + 1) / 2;
+
+    for (int i = 0; i < itemCount; i++) {
+        QPointF pos;
+        if (i < first_row) {
+            pos.setX(25 + (card_width + cardInterval) * i);
+            pos.setY(45);
+        } else {
+            if (itemCount % 2 == 1)
+                pos.setX(25 + card_width / 2 + cardInterval / 2
+                + (card_width + cardInterval) * (i - first_row));
+            else
+                pos.setX(25 + (card_width + cardInterval) * (i - first_row));
+            pos.setY(45 + card_height + cardInterval);
+        }
+        CardItem *item = items[i];
+        item->resetTransform();
+        item->setPos(pos);
+        item->setHomePos(pos);
+        item->setOpacity(1.0);
+        item->setHomeOpacity(1.0);
+        item->setFlag(QGraphicsItem::ItemIsFocusable);
+        if (disabled_item.contains(item))
+            item->setEnabled(false);
+        item->setOuterGlowEffectEnabled(true);
+        item->show();
+    }
     confirm_button->setPos(boundingRect().center().x() - confirm_button->boundingRect().width() / 2, boundingRect().height() - 40);
 }
 
@@ -168,6 +235,12 @@ bool CardContainer::retained()
 
 void CardContainer::clear()
 {
+    if (progressBar != NULL) {
+        progressBar->hide();
+        progressBar->deleteLater();
+        progressBar = NULL;
+    }
+
     foreach (CardItem *item, items) {
         item->hide();
         item->deleteLater();
@@ -175,12 +248,13 @@ void CardContainer::clear()
     }
 
     items.clear();
-    if (!items_stack.isEmpty()) {
+
+    if (!items_stack.isEmpty() && Sanguosha->currentRoomObject() != NULL) {
         items = items_stack.pop();
         bool retained = retained_stack.pop();
         fillCards();
         if (retained && confirm_button)
-            confirm_button->show();
+            addConfirmButton();
     } else {
         ids.clear();
         confirm_button->hide();
@@ -257,6 +331,22 @@ void CardContainer::addConfirmButton()
         card->setFlag(ItemIsMovable, false);
 
     confirm_button->show();
+    if (!progressBar) {
+        progressBar = new QSanCommandProgressBar();
+        progressBarItem = new QGraphicsProxyWidget(this);
+    }
+    progressBar->setMaximumWidth(boundingRect().width() - 10);
+    progressBar->setMaximumHeight(10);
+    progressBar->setTimerEnabled(true);
+    progressBarItem->setWidget(progressBar);
+    progressBarItem->setPos(boundingRect().center().x() - progressBarItem->boundingRect().width() / 2, boundingRect().height() - 20);
+    connect(progressBar, &QSanCommandProgressBar::timedOut, this, &CardContainer::clear);
+
+    Countdown countdown;
+    countdown.max = 10000;
+    countdown.type = Countdown::S_COUNTDOWN_USE_SPECIFIED;
+    progressBar->setCountdown(countdown);
+    progressBar->show();
 }
 
 void CardContainer::grabItem()

@@ -164,7 +164,9 @@ namespace QSanProtocol
         S_COMMAND_CHANGE_SKIN,
         S_COMMAND_SKILL_MOVECARDS,
         S_COMMAND_MIRROR_MOVECARDS_STEP,
-        S_COMMAND_SET_VISIBLE_CARDS
+        S_COMMAND_SET_VISIBLE_CARDS,
+        S_COMMAND_SET_ACTULGENERAL,
+        S_COMMAND_GLOBAL_CHOOSECARD
     };
 
     enum GameEventType
@@ -184,7 +186,8 @@ namespace QSanProtocol
         S_GAME_EVENT_PLAYER_REFORM,
         S_GAME_EVENT_SKILL_INVOKED,
         S_GAME_EVENT_PAUSE,
-        S_GAME_EVENT_REVEAL_PINDIAN
+        S_GAME_EVENT_REVEAL_PINDIAN,
+        S_GAME_EVENT_HUASHEN
     };
 
     enum AnimateType

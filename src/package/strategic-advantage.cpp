@@ -326,6 +326,11 @@ public:
         return QStringList();
     }
 
+    virtual bool cost(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *) const
+    {
+        return ArmorSkill::cost(room, player, data);
+    }
+
     virtual bool effect(TriggerEvent, Room *room, ServerPlayer *player, QVariant &data, ServerPlayer *) const
     {
         CardUseStruct use = data.value<CardUseStruct>();
@@ -338,6 +343,7 @@ public:
         room->cancelTarget(use, player); // Room::cancelTarget(use, player);
 
         data = QVariant::fromValue(use);
+        ArmorSkill::playAudio(player);
         return false;
     }
 };
@@ -950,12 +956,18 @@ void FightTogether::onUse(Room *room, const CardUseStruct &card_use) const
                 smalls << p;
         }
     }
+    if (this->getSkillName(true) == "qice") {
+        if (!bigs.isEmpty() && bigs.length() > this->getSubcards().length())
+            bigs.clear();
+        if (!smalls.isEmpty() && smalls.length() > this->getSubcards().length())
+            smalls.clear();
+    }
     QStringList choices;
     if (!bigs.isEmpty())
         choices << "big";
     if (!smalls.isEmpty())
         choices << "small";
-    if (!source->isCardLimited(this, Card::MethodRecast))
+    if (!source->isCardLimited(this, Card::MethodRecast) && can_recast)
         choices << "recast";
 
     Q_ASSERT(!choices.isEmpty());
@@ -1011,10 +1023,15 @@ void FightTogether::onEffect(const CardEffectStruct &effect) const
 }
 
 AllianceFeast::AllianceFeast(Card::Suit suit, int number)
-    : AOE(suit, number)
+    : TrickCard(suit, number)
 {
     setObjectName("alliance_feast");
     target_fixed = false;
+}
+
+QString AllianceFeast::getSubtype() const
+{
+    return "alliance_feast";
 }
 
 bool AllianceFeast::targetFilter(const QList<const Player *> &targets, const Player *to_select, const Player *Self) const
